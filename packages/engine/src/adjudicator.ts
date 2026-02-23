@@ -2,18 +2,17 @@
  * TypeScript wrapper around the Python diplomacy adjudication bridge.
  * Calls scripts/adjudicate.py as a subprocess with JSON on stdin/stdout.
  */
-import { execFile } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
-import { promisify } from 'node:util';
-import type { Power } from '@yourfriend/shared';
-
-const execFileAsync = promisify(execFile);
+import type { Power } from '@yourstaunchally/shared';
 
 /** Path to the Python script — resolved relative to project root */
 const SCRIPT_PATH = resolve(import.meta.dirname, '../../../scripts/adjudicate.py');
 
-/** Python executable — configurable via env for Docker/venv */
-const PYTHON_PATH = process.env['PYTHON_PATH'] ?? 'python3';
+/** Python executable — read lazily so tests can set PYTHON_PATH before first call */
+function getPythonPath(): string {
+	return process.env['PYTHON_PATH'] ?? 'python3';
+}
 
 interface AdjudicatorResponse {
 	ok: boolean;
@@ -25,22 +24,49 @@ interface AdjudicatorResponse {
 async function callAdjudicator(request: Record<string, unknown>): Promise<Record<string, unknown>> {
 	const input = JSON.stringify(request);
 
-	const { stdout, stderr } = await execFileAsync(PYTHON_PATH, [SCRIPT_PATH], {
-		input,
-		maxBuffer: 10 * 1024 * 1024, // 10MB for SVG maps
-		timeout: 30_000,
+	return new Promise((resolveP, reject) => {
+		const proc = spawn(getPythonPath(), [SCRIPT_PATH], {
+			stdio: ['pipe', 'pipe', 'pipe'],
+			timeout: 30_000,
+		});
+
+		const stdoutChunks: Buffer[] = [];
+		const stderrChunks: Buffer[] = [];
+
+		proc.stdout.on('data', (chunk: Buffer) => stdoutChunks.push(chunk));
+		proc.stderr.on('data', (chunk: Buffer) => stderrChunks.push(chunk));
+
+		proc.on('error', (err) => reject(err));
+
+		proc.on('close', (code) => {
+			const stdout = Buffer.concat(stdoutChunks).toString();
+			const stderr = Buffer.concat(stderrChunks).toString();
+
+			if (stderr) {
+				console.warn('[adjudicator stderr]', stderr);
+			}
+
+			if (code !== 0) {
+				reject(new Error(`Adjudicator exited with code ${code}: ${stderr || stdout}`));
+				return;
+			}
+
+			try {
+				const response = JSON.parse(stdout) as AdjudicatorResponse;
+				if (!response.ok) {
+					reject(new Error(`Adjudicator error: ${response.error ?? 'unknown'}`));
+					return;
+				}
+				resolveP(response.result ?? {});
+			} catch {
+				reject(new Error(`Failed to parse adjudicator output: ${stdout.slice(0, 200)}`));
+			}
+		});
+
+		// Write input and close stdin to signal EOF
+		proc.stdin.write(input);
+		proc.stdin.end();
 	});
-
-	if (stderr) {
-		console.warn('[adjudicator stderr]', stderr);
-	}
-
-	const response = JSON.parse(stdout) as AdjudicatorResponse;
-	if (!response.ok) {
-		throw new Error(`Adjudicator error: ${response.error ?? 'unknown'}`);
-	}
-
-	return response.result ?? {};
 }
 
 /** Create a new standard Diplomacy game */

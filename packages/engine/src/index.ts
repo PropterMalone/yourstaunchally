@@ -18,7 +18,7 @@ const TICK_INTERVAL_MS = 60_000; // 1 minute
 async function main() {
 	const identifier = process.env['BSKY_IDENTIFIER'];
 	const password = process.env['BSKY_PASSWORD'];
-	const dbPath = process.env['DB_PATH'] ?? '/data/yourfriend.db';
+	const dbPath = process.env['DB_PATH'] ?? '/data/yourstaunchally.db';
 
 	if (!identifier || !password) {
 		console.error('Missing BSKY_IDENTIFIER or BSKY_PASSWORD');

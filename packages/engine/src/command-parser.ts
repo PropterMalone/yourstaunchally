@@ -2,14 +2,14 @@
  * Parse mention commands and DM order submissions.
  *
  * Mention commands (public):
- *   @yourfriend new game        → create a game
- *   @yourfriend join #abc123    → join a game
- *   @yourfriend leave #abc123   → leave a game (lobby only)
- *   @yourfriend start #abc123   → manually start (3-6 players)
- *   @yourfriend status #abc123  → game status
- *   @yourfriend draw #abc123    → vote for a draw
- *   @yourfriend abandon #abc123 → abandon a game (creator only)
- *   @yourfriend help            → show help text
+ *   @yourstaunchally new game        → create a game
+ *   @yourstaunchally join #abc123    → join a game
+ *   @yourstaunchally leave #abc123   → leave a game (lobby only)
+ *   @yourstaunchally start #abc123   → manually start (3-6 players)
+ *   @yourstaunchally status #abc123  → game status
+ *   @yourstaunchally draw #abc123    → vote for a draw
+ *   @yourstaunchally abandon #abc123 → abandon a game (creator only)
+ *   @yourstaunchally help            → show help text
  *
  * DM commands (private orders):
  *   #abc123 A PAR - BUR; A MAR - SPA; F BRE - MAO

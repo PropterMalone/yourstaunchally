@@ -3,73 +3,73 @@ import { parseDm, parseMention } from './command-parser.js';
 
 describe('parseMention', () => {
 	it('parses "new game"', () => {
-		expect(parseMention('@yourfriend new game')).toEqual({ type: 'new_game' });
+		expect(parseMention('@yourstaunchally new game')).toEqual({ type: 'new_game' });
 	});
 
 	it('parses "new" alone', () => {
-		expect(parseMention('@yourfriend new')).toEqual({ type: 'new_game' });
+		expect(parseMention('@yourstaunchally new')).toEqual({ type: 'new_game' });
 	});
 
 	it('parses "join #abc123"', () => {
-		expect(parseMention('@yourfriend join #abc123')).toEqual({
+		expect(parseMention('@yourstaunchally join #abc123')).toEqual({
 			type: 'join',
 			gameId: 'abc123',
 		});
 	});
 
 	it('parses "leave #abc123"', () => {
-		expect(parseMention('@yourfriend leave #abc123')).toEqual({
+		expect(parseMention('@yourstaunchally leave #abc123')).toEqual({
 			type: 'leave',
 			gameId: 'abc123',
 		});
 	});
 
 	it('parses "start #abc123"', () => {
-		expect(parseMention('@yourfriend start #abc123')).toEqual({
+		expect(parseMention('@yourstaunchally start #abc123')).toEqual({
 			type: 'start',
 			gameId: 'abc123',
 		});
 	});
 
 	it('parses "status #abc123"', () => {
-		expect(parseMention('@yourfriend status #abc123')).toEqual({
+		expect(parseMention('@yourstaunchally status #abc123')).toEqual({
 			type: 'status',
 			gameId: 'abc123',
 		});
 	});
 
 	it('parses "draw #abc123"', () => {
-		expect(parseMention('@yourfriend draw #abc123')).toEqual({
+		expect(parseMention('@yourstaunchally draw #abc123')).toEqual({
 			type: 'draw',
 			gameId: 'abc123',
 		});
 	});
 
 	it('parses "abandon #abc123"', () => {
-		expect(parseMention('@yourfriend abandon #abc123')).toEqual({
+		expect(parseMention('@yourstaunchally abandon #abc123')).toEqual({
 			type: 'abandon',
 			gameId: 'abc123',
 		});
 	});
 
 	it('parses "help"', () => {
-		expect(parseMention('@yourfriend help')).toEqual({ type: 'help' });
+		expect(parseMention('@yourstaunchally help')).toEqual({ type: 'help' });
 	});
 
 	it('handles unknown commands', () => {
-		const result = parseMention('@yourfriend something weird');
+		const result = parseMention('@yourstaunchally something weird');
 		expect(result.type).toBe('unknown');
 	});
 
 	it('is case-insensitive', () => {
-		expect(parseMention('@yourfriend JOIN #ABC123')).toEqual({
+		expect(parseMention('@yourstaunchally JOIN #ABC123')).toEqual({
 			type: 'join',
 			gameId: 'abc123',
 		});
 	});
 
 	it('handles extra whitespace', () => {
-		expect(parseMention('  @yourfriend   join   #abc123  ')).toEqual({
+		expect(parseMention('  @yourstaunchally   join   #abc123  ')).toEqual({
 			type: 'join',
 			gameId: 'abc123',
 		});

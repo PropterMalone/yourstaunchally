@@ -1,8 +1,8 @@
-# YourFriend: Diplomacy on Bluesky
+# YourStaunchAlly: Diplomacy on Bluesky
 
 ## Project Purpose
 
-Bot that runs games of Diplomacy (7-player strategy board game) on Bluesky. Public negotiation in threads, private order submission via DM. Named "YourFriend" — ironic given Diplomacy's core mechanic is betrayal.
+Bot that runs games of Diplomacy (7-player strategy board game) on Bluesky. Public negotiation in threads, private order submission via DM. Named "YourStaunchAlly" — ironic given Diplomacy's core mechanic is betrayal.
 
 ## Technology Stack
 
@@ -57,7 +57,7 @@ npm run build       # tsc -b across all packages
 
 ## Game Flow
 
-1. `@yourfriend new game` → creates lobby, creator auto-joins
+1. `@yourstaunchally new game` → creates lobby, creator auto-joins
 2. Players `join #id` → auto-starts at 7, or `start #id` with 3-6
 3. Powers assigned randomly, unassigned enter civil disorder
 4. Orders via DM: `#id A PAR - BUR; A MAR - SPA; F BRE - MAO`
@@ -78,7 +78,7 @@ npm run build       # tsc -b across all packages
 BSKY_IDENTIFIER=    # Bot's Bluesky handle
 BSKY_PASSWORD=      # Bot's app password
 LIVE_DMS=1          # Enable real Bluesky DMs (default: console)
-DB_PATH=            # SQLite path (default: /data/yourfriend.db)
+DB_PATH=            # SQLite path (default: /data/yourstaunchally.db)
 PYTHON_PATH=        # Python executable (default: python3)
 ```
 
