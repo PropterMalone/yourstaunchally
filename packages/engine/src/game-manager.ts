@@ -25,7 +25,7 @@ import {
 	startGame,
 	submitOrders,
 	voteDraw,
-} from '@yourfriend/shared';
+} from '@yourstaunchally/shared';
 import { newGame, setOrdersAndProcess } from './adjudicator.js';
 import type { MentionNotification } from './bot.js';
 import { postMessage, replyToPost } from './bot.js';
@@ -329,7 +329,7 @@ export function createGameManager(deps: GameManagerDeps) {
 			return;
 		}
 
-		const { abandonGame } = await import('@yourfriend/shared');
+		const { abandonGame } = await import('@yourstaunchally/shared');
 		const abandoned = abandonGame(state);
 		db.saveGame(abandoned);
 		await postMessage(agent, `❌ Game #${command.gameId} has been abandoned.`);
@@ -552,7 +552,7 @@ export function createGameManager(deps: GameManagerDeps) {
 	};
 }
 
-const HELP_TEXT = `🎲 YourFriend — Diplomacy Bot
+const HELP_TEXT = `🎲 YourStaunchAlly — Diplomacy Bot
 
 Commands:
 • new game — Start a new game

@@ -4,7 +4,7 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
 	resolve: {
 		alias: {
-			'@yourfriend/shared': resolve(__dirname, 'packages/shared/src/index.ts'),
+			'@yourstaunchally/shared': resolve(__dirname, 'packages/shared/src/index.ts'),
 		},
 	},
 	test: {

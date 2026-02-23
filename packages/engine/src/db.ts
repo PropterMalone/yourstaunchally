@@ -1,4 +1,4 @@
-import type { GameState } from '@yourfriend/shared';
+import type { GameState } from '@yourstaunchally/shared';
 /**
  * SQLite persistence for Diplomacy games.
  * Game state stored as JSON blob (same pattern as Skeetwolf).
