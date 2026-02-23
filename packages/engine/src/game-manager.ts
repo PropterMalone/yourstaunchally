@@ -32,6 +32,7 @@ import { postMessage, replyToPost } from './bot.js';
 import { type DmCommand, type MentionCommand, parseDm, parseMention } from './command-parser.js';
 import type { GameDb } from './db.js';
 import type { DmSender, InboundDm } from './dm.js';
+import { postWithMapSvg } from './map-renderer.js';
 
 export interface GameManagerDeps {
 	agent: AtpAgent;
@@ -505,7 +506,11 @@ export function createGameManager(deps: GameManagerDeps) {
 				? `👑 Game #${state.gameId}: ${victory.winner} achieves solo victory!\n\n${formatCenterCounts(adjResult.centers)}`
 				: `Game #${state.gameId} has ended.\n\n${formatCenterCounts(adjResult.centers)}`;
 
-			await postMessage(agent, msg);
+			if (adjResult.svg) {
+				await postWithMapSvg(agent, msg, adjResult.svg, `Final map — Game #${state.gameId}`);
+			} else {
+				await postMessage(agent, msg);
+			}
 			return;
 		}
 
@@ -519,10 +524,18 @@ export function createGameManager(deps: GameManagerDeps) {
 		const phaseTypeName =
 			phase.type === 'M' ? 'Movement' : phase.type === 'R' ? 'Retreats' : 'Adjustments';
 
-		await postMessage(
-			agent,
-			`📜 Game #${state.gameId}: ${seasonName} ${phase.year} ${phaseTypeName}\n\n${formatCenterCounts(adjResult.centers)}\n\nDeadline: ${advanced.phaseDeadline}`,
-		);
+		const phaseMsg = `📜 Game #${state.gameId}: ${seasonName} ${phase.year} ${phaseTypeName}\n\n${formatCenterCounts(adjResult.centers)}\n\nDeadline: ${advanced.phaseDeadline}`;
+
+		if (adjResult.svg) {
+			await postWithMapSvg(
+				agent,
+				phaseMsg,
+				adjResult.svg,
+				`Diplomacy map — ${seasonName} ${phase.year}`,
+			);
+		} else {
+			await postMessage(agent, phaseMsg);
+		}
 
 		// Notify players about the new phase (non-fatal)
 		for (const player of advanced.players) {
