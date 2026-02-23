@@ -13,7 +13,7 @@ const MAX_WAIT = 120_000; // 2 min max wait
 
 const ACCOUNTS = [
 	{ identifier: 'bobbyquine.bsky.social', password: '24f5-rs2m-3xjo-p4gq' },
-	{ identifier: 'starcountr.bsky.social', password: 'hbmz-acfx-svjf-et7d' },
+	{ identifier: 'jackautomatic.bsky.social', password: 'vbh_gdw*qtc6RTE0jdg' },
 ];
 
 /** Post a mention to the bot with proper facets */
