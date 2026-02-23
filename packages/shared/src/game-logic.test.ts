@@ -139,8 +139,8 @@ describe('startGame', () => {
 		}
 	});
 
-	it('rejects start with fewer than 3 players', () => {
-		const lobby = lobbyWith(2);
+	it('rejects start with fewer than 2 players', () => {
+		const lobby = lobbyWith(1);
 		const result = startGame(lobby);
 		expect(result.ok).toBe(false);
 	});
