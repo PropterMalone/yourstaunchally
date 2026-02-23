@@ -165,7 +165,7 @@ export interface GameConfig {
 export const DEFAULT_GAME_CONFIG: GameConfig = {
 	movementPhaseHours: 48,
 	retreatPhaseHours: 24,
-	minPlayers: 3,
+	minPlayers: 2,
 	maxPlayers: 7,
 };
 

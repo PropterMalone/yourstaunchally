@@ -215,13 +215,17 @@ export function createGameManager(deps: GameManagerDeps) {
 
 		db.saveGame(started);
 
-		// DM each player their power assignment
+		// DM each player their power assignment (non-fatal — DMs may fail if player doesn't follow bot)
 		for (const player of started.players) {
 			if (player.power) {
-				await dmSender.sendDm(
-					player.did,
-					`Game #${started.gameId} has started! You are ${player.power}.\n\nSubmit orders via DM: #${started.gameId} A PAR - BUR; A MAR - SPA\n\nDeadline: ${started.phaseDeadline}`,
-				);
+				try {
+					await dmSender.sendDm(
+						player.did,
+						`Game #${started.gameId} has started! You are ${player.power}.\n\nSubmit orders via DM: #${started.gameId} A PAR - BUR; A MAR - SPA\n\nDeadline: ${started.phaseDeadline}`,
+					);
+				} catch (error) {
+					console.warn(`[dm] Failed to DM ${player.handle}: ${error}`);
+				}
 			}
 		}
 
@@ -520,13 +524,17 @@ export function createGameManager(deps: GameManagerDeps) {
 			`📜 Game #${state.gameId}: ${seasonName} ${phase.year} ${phaseTypeName}\n\n${formatCenterCounts(adjResult.centers)}\n\nDeadline: ${advanced.phaseDeadline}`,
 		);
 
-		// Notify players about the new phase
+		// Notify players about the new phase (non-fatal)
 		for (const player of advanced.players) {
 			if (player.power) {
-				await dmSender.sendDm(
-					player.did,
-					`New phase: ${adjResult.phase} in #${state.gameId}. Submit your orders!\nDeadline: ${advanced.phaseDeadline}`,
-				);
+				try {
+					await dmSender.sendDm(
+						player.did,
+						`New phase: ${adjResult.phase} in #${state.gameId}. Submit your orders!\nDeadline: ${advanced.phaseDeadline}`,
+					);
+				} catch (error) {
+					console.warn(`[dm] Failed to DM ${player.handle}: ${error}`);
+				}
 			}
 		}
 	}
