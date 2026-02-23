@@ -1,0 +1,10 @@
+node_modules/
+dist/
+coverage/
+.env
+*.db
+*.db-journal
+data/
+.venv/
+__pycache__/
+*.pyc
