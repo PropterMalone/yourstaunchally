@@ -54,6 +54,10 @@ async function main() {
 				db.setBotState('mention_cursor', cursor);
 			}
 
+			if (notifications.length > 0) {
+				console.log(`[poll] Found ${notifications.length} mention(s)`);
+			}
+
 			for (const notification of notifications) {
 				try {
 					await manager.handleMention(notification);
@@ -80,6 +84,10 @@ async function main() {
 			if (latestMessageId) {
 				dmCursor = latestMessageId;
 				db.setBotState('dm_cursor', latestMessageId);
+			}
+
+			if (messages.length > 0) {
+				console.log(`[poll] Found ${messages.length} DM(s)`);
 			}
 
 			for (const dm of messages) {
