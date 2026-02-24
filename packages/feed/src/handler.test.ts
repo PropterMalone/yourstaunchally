@@ -11,6 +11,7 @@ function setupDb(): Database.Database {
 	db.exec(`
 		CREATE TABLE IF NOT EXISTS game_posts (
 			uri TEXT PRIMARY KEY,
+			cid TEXT NOT NULL DEFAULT '',
 			game_id TEXT NOT NULL,
 			author_did TEXT NOT NULL,
 			kind TEXT NOT NULL,

@@ -302,7 +302,7 @@ async function run() {
 	console.log('\n--- Checking Docker logs for errors ---\n');
 	try {
 		const { execSync } = await import('node:child_process');
-		const logs = execSync('docker logs yourfriend-engine-1 --since 5m 2>&1', { encoding: 'utf-8' });
+		const logs = execSync('docker logs yourstaunchally-engine-1 --since 5m 2>&1', { encoding: 'utf-8' });
 		const errorLines = logs.split('\n').filter(l => /error/i.test(l) && !/civil disorder/i.test(l));
 		if (errorLines.length === 0) {
 			console.log('  [PASS] No errors in Docker logs');
