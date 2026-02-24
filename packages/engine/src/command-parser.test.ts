@@ -72,6 +72,14 @@ describe('parseMention', () => {
 		expect(parseMention('@yourstaunchally help')).toEqual({ type: 'help' });
 	});
 
+	it('parses "games"', () => {
+		expect(parseMention('@yourstaunchally games')).toEqual({ type: 'games' });
+	});
+
+	it('parses "list"', () => {
+		expect(parseMention('@yourstaunchally list')).toEqual({ type: 'games' });
+	});
+
 	it('handles unknown commands', () => {
 		const result = parseMention('@yourstaunchally something weird');
 		expect(result.type).toBe('unknown');
@@ -117,6 +125,14 @@ describe('parseDm', () => {
 
 	it('parses "possible" query', () => {
 		expect(parseDm('#abc123 possible')).toEqual({ type: 'show_possible', gameId: 'abc123' });
+	});
+
+	it('parses "my games" DM', () => {
+		expect(parseDm('my games')).toEqual({ type: 'my_games' });
+	});
+
+	it('parses "games" DM', () => {
+		expect(parseDm('games')).toEqual({ type: 'my_games' });
 	});
 
 	it('handles unknown DM text', () => {
