@@ -99,6 +99,9 @@ export function createGameManager(deps: GameManagerDeps) {
 			case 'claim':
 				await handleClaim(command, notification, reply);
 				break;
+			case 'games':
+				await handleGames(reply);
+				break;
 			case 'help':
 				await reply(HELP_TEXT);
 				break;
@@ -301,6 +304,27 @@ export function createGameManager(deps: GameManagerDeps) {
 		);
 	}
 
+	async function handleGames(reply: (text: string) => Promise<void>): Promise<void> {
+		const activeGames = db.loadActiveGames();
+		const lobbyGames = db.loadLobbyGames();
+
+		if (activeGames.length === 0 && lobbyGames.length === 0) {
+			await reply('No active or open games. Start one with "new game"!');
+			return;
+		}
+
+		const lines: string[] = [];
+		for (const game of lobbyGames) {
+			lines.push(`#${game.gameId} — Lobby (${game.players.length}/${config.maxPlayers} players)`);
+		}
+		for (const game of activeGames) {
+			const phase = game.currentPhase ?? '?';
+			const playerCount = game.players.filter((p) => p.power).length;
+			lines.push(`#${game.gameId} — ${phase} (${playerCount} players)`);
+		}
+		await reply(lines.join('\n'));
+	}
+
 	async function handleDraw(
 		command: MentionCommand & { type: 'draw' },
 		notification: MentionNotification,
@@ -421,6 +445,9 @@ export function createGameManager(deps: GameManagerDeps) {
 			case 'show_possible':
 				await handleShowPossible(command, dm);
 				break;
+			case 'my_games':
+				await handleMyGames(dm);
+				break;
 			case 'unknown':
 				await dmSender.sendDm(
 					dm.senderDid,
@@ -538,6 +565,29 @@ export function createGameManager(deps: GameManagerDeps) {
 		}
 
 		await dmSender.sendDm(dm.senderDid, msg);
+	}
+
+	async function handleMyGames(dm: InboundDm): Promise<void> {
+		const activeGames = db.loadActiveGames();
+		const lobbyGames = db.loadLobbyGames();
+		const allGames = [...lobbyGames, ...activeGames];
+		const myGames = allGames.filter((g) => g.players.some((p) => p.did === dm.senderDid));
+
+		if (myGames.length === 0) {
+			await dmSender.sendDm(dm.senderDid, 'You are not in any active games.');
+			return;
+		}
+
+		const lines = myGames.map((g) => {
+			const player = g.players.find((p) => p.did === dm.senderDid);
+			const power = player?.power ?? 'unassigned';
+			if (g.status === 'lobby') return `#${g.gameId} — Lobby (${power})`;
+			const phase = g.currentPhase ?? '?';
+			const hasOrders = power !== 'unassigned' && g.currentOrders[power];
+			const orderStatus = hasOrders ? 'orders in' : 'orders pending';
+			return `#${g.gameId} — ${phase} (${power}, ${orderStatus})`;
+		});
+		await dmSender.sendDm(dm.senderDid, `Your games:\n${lines.join('\n')}`);
 	}
 
 	/** Process the current phase — adjudicate, update state, post results */
@@ -679,7 +729,9 @@ Mention commands:
 • start #id — Start (2-7 players)
 • status #id — Check phase/orders
 • draw #id — Vote for draw
+• claim #id POWER — Claim unassigned power
 • abandon #id — Cancel (creator only)
+• games — List active games
 
 DM to submit orders:
 #id A PAR - BUR; F BRE - MAO; A MAR S A PAR - BUR

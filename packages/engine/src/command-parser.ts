@@ -27,6 +27,7 @@ export type MentionCommand =
 	| { type: 'draw'; gameId: string }
 	| { type: 'abandon'; gameId: string }
 	| { type: 'claim'; gameId: string; power: string }
+	| { type: 'games' }
 	| { type: 'help' }
 	| { type: 'unknown'; text: string };
 
@@ -34,6 +35,7 @@ export type DmCommand =
 	| { type: 'submit_orders'; gameId: string; orderLines: string[] }
 	| { type: 'show_orders'; gameId: string }
 	| { type: 'show_possible'; gameId: string }
+	| { type: 'my_games' }
 	| { type: 'unknown'; text: string };
 
 const GAME_ID_RE = /#([a-z0-9]{4,8})/i;
@@ -55,6 +57,10 @@ export function parseMention(text: string): MentionCommand {
 
 	if (cleaned.startsWith('new game') || cleaned === 'new') {
 		return { type: 'new_game' };
+	}
+
+	if (cleaned === 'games' || cleaned === 'list') {
+		return { type: 'games' };
 	}
 
 	const gameIdMatch = text.match(GAME_ID_RE);
@@ -100,6 +106,12 @@ export function parseMention(text: string): MentionCommand {
  */
 export function parseDm(text: string): DmCommand {
 	const trimmed = text.trim();
+	const lower = trimmed.toLowerCase();
+
+	if (lower === 'my games' || lower === 'games' || lower === 'list') {
+		return { type: 'my_games' };
+	}
+
 	const gameIdMatch = trimmed.match(GAME_ID_RE);
 
 	if (!gameIdMatch?.[1]) {
