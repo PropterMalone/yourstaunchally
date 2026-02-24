@@ -49,7 +49,7 @@ const server = createServer(async (req, res) => {
 		res.end(
 			JSON.stringify({
 				'@context': ['https://www.w3.org/ns/did/v1'],
-				id: `did:web:${hostname}`,
+				id: PUBLISHER_DID,
 				service: [
 					{
 						id: '#bsky_fg',
