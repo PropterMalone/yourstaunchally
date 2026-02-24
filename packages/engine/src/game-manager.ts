@@ -131,7 +131,7 @@ export function createGameManager(deps: GameManagerDeps) {
 		state = { ...state, announcementPost: announcement };
 
 		db.saveGame(state);
-		db.recordGamePost(gameId, announcement.uri, announcement.cid, 'announcement');
+		db.recordGamePost(announcement.uri, gameId, botDid, 'announcement', null);
 
 		await reply(`Game #${gameId} created! Waiting for players (1/${config.maxPlayers}).`);
 	}
@@ -249,10 +249,18 @@ export function createGameManager(deps: GameManagerDeps) {
 		const civilDisorder =
 			unassigned.length > 0 ? `\n\nCivil disorder: ${unassigned.join(', ')}` : '';
 
-		await postMessage(
+		const startPost = await postMessage(
 			agent,
 			`⚔️ Game #${started.gameId} begins! Phase: ${started.currentPhase}\n\n${powerList}${civilDisorder}\n\nDeadline: ${started.phaseDeadline}`,
 		);
+		db.recordGamePost(startPost.uri, started.gameId, botDid, 'game_start', started.currentPhase);
+
+		// Register per-game feed on Bluesky
+		try {
+			await registerGameFeed(started.gameId);
+		} catch (error) {
+			console.warn(`[feed] Failed to register feed for #${started.gameId}: ${error}`);
+		}
 	}
 
 	async function handleStatus(
@@ -322,7 +330,11 @@ export function createGameManager(deps: GameManagerDeps) {
 			const standings = result.state.lastCenters
 				? `\n\n${formatStandings(result.state, result.state.lastCenters)}`
 				: '';
-			await postMessage(agent, `🤝 Game #${command.gameId} ends in a draw!${standings}`);
+			const drawPost = await postMessage(
+				agent,
+				`🤝 Game #${command.gameId} ends in a draw!${standings}`,
+			);
+			db.recordGamePost(drawPost.uri, command.gameId, botDid, 'game_over', state.currentPhase);
 		} else {
 			const total = state.players.filter((p) => p.power).length;
 			await reply(
@@ -351,7 +363,8 @@ export function createGameManager(deps: GameManagerDeps) {
 		const { abandonGame } = await import('@yourstaunchally/shared');
 		const abandoned = abandonGame(state);
 		db.saveGame(abandoned);
-		await postMessage(agent, `❌ Game #${command.gameId} has been abandoned.`);
+		const abandonPost = await postMessage(agent, `❌ Game #${command.gameId} has been abandoned.`);
+		db.recordGamePost(abandonPost.uri, command.gameId, botDid, 'game_over', state.currentPhase);
 	}
 
 	async function handleClaim(
@@ -567,11 +580,10 @@ export function createGameManager(deps: GameManagerDeps) {
 				? `👑 Game #${state.gameId}: ${victory.winner} achieves solo victory!\n\n${standings}`
 				: `Game #${state.gameId} has ended — draw agreed.\n\n${standings}`;
 
-			if (adjResult.svg) {
-				await postWithMapSvg(agent, msg, adjResult.svg, `Final map — Game #${state.gameId}`);
-			} else {
-				await postMessage(agent, msg);
-			}
+			const victoryPost = adjResult.svg
+				? await postWithMapSvg(agent, msg, adjResult.svg, `Final map — Game #${state.gameId}`)
+				: await postMessage(agent, msg);
+			db.recordGamePost(victoryPost.uri, state.gameId, botDid, 'game_over', state.currentPhase);
 			return;
 		}
 
@@ -594,16 +606,15 @@ export function createGameManager(deps: GameManagerDeps) {
 			: '?';
 		const phaseMsg = `📜 Game #${state.gameId}: ${seasonName} ${phase.year} ${phaseTypeName}\n\n${formatCenterCounts(adjResult.centers)}\n\nDeadline: ${deadlineDisplay}`;
 
-		if (adjResult.svg) {
-			await postWithMapSvg(
-				agent,
-				phaseMsg,
-				adjResult.svg,
-				`Diplomacy map — ${seasonName} ${phase.year}`,
-			);
-		} else {
-			await postMessage(agent, phaseMsg);
-		}
+		const phasePost = adjResult.svg
+			? await postWithMapSvg(
+					agent,
+					phaseMsg,
+					adjResult.svg,
+					`Diplomacy map — ${seasonName} ${phase.year}`,
+				)
+			: await postMessage(agent, phaseMsg);
+		db.recordGamePost(phasePost.uri, state.gameId, botDid, 'phase', adjResult.phase);
 
 		// Notify players about the new phase with their current units (non-fatal)
 		for (const player of advanced.players) {
@@ -633,6 +644,23 @@ export function createGameManager(deps: GameManagerDeps) {
 				await processPhase(state);
 			}
 		}
+	}
+
+	async function registerGameFeed(gameId: string): Promise<void> {
+		const feedPublisherDid = process.env['FEED_PUBLISHER_DID'];
+		if (!feedPublisherDid) return; // Feed not configured, skip silently
+		await agent.com.atproto.repo.putRecord({
+			repo: botDid,
+			collection: 'app.bsky.feed.generator',
+			rkey: `diplo-${gameId}`,
+			record: {
+				did: feedPublisherDid,
+				displayName: `Diplomacy #${gameId}`,
+				description: `Follow Diplomacy game #${gameId} — phase results, maps, and standings.`,
+				createdAt: new Date().toISOString(),
+			},
+		});
+		console.log(`[feed] Registered feed for game #${gameId}`);
 	}
 
 	return {

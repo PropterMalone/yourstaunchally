@@ -21,12 +21,14 @@ RUN pip install --no-cache-dir diplomacy
 COPY package.json package-lock.json ./
 COPY packages/shared/package.json packages/shared/
 COPY packages/engine/package.json packages/engine/
+COPY packages/feed/package.json packages/feed/
 RUN npm ci
 
 # Copy source and build TypeScript
 COPY tsconfig.base.json tsconfig.json ./
 COPY packages/shared/ packages/shared/
 COPY packages/engine/ packages/engine/
+COPY packages/feed/ packages/feed/
 COPY scripts/ scripts/
 RUN npm run build
 
@@ -52,6 +54,8 @@ COPY --from=base /app/packages/shared/dist packages/shared/dist/
 COPY --from=base /app/packages/shared/package.json packages/shared/
 COPY --from=base /app/packages/engine/dist packages/engine/dist/
 COPY --from=base /app/packages/engine/package.json packages/engine/
+COPY --from=base /app/packages/feed/dist packages/feed/dist/
+COPY --from=base /app/packages/feed/package.json packages/feed/
 COPY --from=base /app/package.json ./
 COPY scripts/ scripts/
 
