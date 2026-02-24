@@ -52,6 +52,22 @@ describe('parseMention', () => {
 		});
 	});
 
+	it('parses "claim #id FRANCE"', () => {
+		expect(parseMention('@yourstaunchally claim #abc123 FRANCE')).toEqual({
+			type: 'claim',
+			gameId: 'abc123',
+			power: 'FRANCE',
+		});
+	});
+
+	it('parses claim with lowercase power', () => {
+		expect(parseMention('@yourstaunchally claim #abc123 russia')).toEqual({
+			type: 'claim',
+			gameId: 'abc123',
+			power: 'RUSSIA',
+		});
+	});
+
 	it('parses "help"', () => {
 		expect(parseMention('@yourstaunchally help')).toEqual({ type: 'help' });
 	});

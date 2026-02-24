@@ -5,6 +5,7 @@ import {
 	advancePhase,
 	allOrdersSubmitted,
 	checkSoloVictory,
+	claimPower,
 	createGame,
 	finishGameSoloVictory,
 	formatCenterCounts,
@@ -286,6 +287,39 @@ describe('abandonGame', () => {
 		const abandoned = abandonGame(game);
 		expect(abandoned.status).toBe('finished');
 		expect(abandoned.endReason).toBe('abandoned');
+	});
+});
+
+describe('claimPower', () => {
+	it('lets a new player claim an unassigned power', () => {
+		// Start with 3 players → 4 powers unassigned
+		const game = activeGame(3);
+		const result = claimPower(game, 'did:plc:newcomer', 'newcomer.bsky.social', 'TURKEY');
+		expect(result.ok).toBe(true);
+		if (result.ok) {
+			expect(result.state.players).toHaveLength(4);
+			const newPlayer = result.state.players.find((p) => p.did === 'did:plc:newcomer');
+			expect(newPlayer?.power).toBe('TURKEY');
+		}
+	});
+
+	it('rejects claiming an already-assigned power', () => {
+		const game = activeGame(7); // All powers assigned
+		const result = claimPower(game, 'did:plc:newcomer', 'newcomer.bsky.social', 'AUSTRIA');
+		expect(result.ok).toBe(false);
+	});
+
+	it('rejects if player is already in the game', () => {
+		const game = activeGame(3);
+		const existingDid = game.players[0]?.did ?? '';
+		const result = claimPower(game, existingDid, 'existing.bsky.social', 'TURKEY');
+		expect(result.ok).toBe(false);
+	});
+
+	it('rejects claiming in a lobby game', () => {
+		const lobby = lobbyWith(3);
+		const result = claimPower(lobby, 'did:plc:newcomer', 'newcomer.bsky.social', 'FRANCE');
+		expect(result.ok).toBe(false);
 	});
 });
 

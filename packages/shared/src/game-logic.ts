@@ -80,6 +80,34 @@ export function removePlayer(
 	};
 }
 
+/** Claim an unassigned power in an active game (replacement player) */
+export function claimPower(
+	state: GameState,
+	did: string,
+	handle: string,
+	power: Power,
+): { ok: true; state: GameState } | { ok: false; error: string } {
+	if (state.status !== 'active') {
+		return { ok: false, error: 'Game is not active' };
+	}
+	if (!POWERS.includes(power)) {
+		return { ok: false, error: `${power} is not a valid power` };
+	}
+	// Check if power is already assigned to a player
+	if (state.players.some((p) => p.power === power)) {
+		return { ok: false, error: `${power} is already assigned to a player` };
+	}
+	// Check if this person is already playing
+	if (state.players.some((p) => p.did === did)) {
+		return { ok: false, error: 'You are already playing in this game' };
+	}
+	const newPlayer: Player = { did, handle, power, joinedAt: new Date().toISOString() };
+	return {
+		ok: true,
+		state: { ...state, players: [...state.players, newPlayer] },
+	};
+}
+
 /**
  * Start a game — assign powers randomly, transition to active.
  * Powers are shuffled and assigned to players in order.
