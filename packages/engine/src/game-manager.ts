@@ -216,6 +216,8 @@ export function createGameManager(deps: GameManagerDeps) {
 		const started = {
 			...result.state,
 			diplomacyState: adjResult.gameState,
+			lastCenters: adjResult.centers,
+			lastUnits: adjResult.units,
 		};
 
 		db.saveGame(started);
@@ -284,8 +286,10 @@ export function createGameManager(deps: GameManagerDeps) {
 
 		const pending = getPendingPowers(state);
 		const pendingStr = pending.length > 0 ? `Waiting on: ${pending.join(', ')}` : 'All orders in!';
+		const centersStr = state.lastCenters ? `\n${formatCenterCounts(state.lastCenters)}` : '';
+		const deadlineStr = state.phaseDeadline ? formatRelativeDeadline(state.phaseDeadline) : '?';
 		await reply(
-			`#${state.gameId} — ${state.currentPhase}\n${pendingStr}\nDeadline: ${state.phaseDeadline}`,
+			`#${state.gameId} — ${state.currentPhase}\n${pendingStr}${centersStr}\nDeadline: ${deadlineStr}`,
 		);
 	}
 
@@ -315,7 +319,10 @@ export function createGameManager(deps: GameManagerDeps) {
 		db.saveGame(result.state);
 
 		if (result.drawAchieved) {
-			await postMessage(agent, `🤝 Game #${command.gameId} ends in a draw!`);
+			const standings = result.state.lastCenters
+				? `\n\n${formatStandings(result.state, result.state.lastCenters)}`
+				: '';
+			await postMessage(agent, `🤝 Game #${command.gameId} ends in a draw!${standings}`);
 		} else {
 			const total = state.players.filter((p) => p.power).length;
 			await reply(
@@ -555,9 +562,10 @@ export function createGameManager(deps: GameManagerDeps) {
 
 			db.saveGame(finished);
 
+			const standings = formatStandings(state, adjResult.centers);
 			const msg = victory
-				? `👑 Game #${state.gameId}: ${victory.winner} achieves solo victory!\n\n${formatCenterCounts(adjResult.centers)}`
-				: `Game #${state.gameId} has ended.\n\n${formatCenterCounts(adjResult.centers)}`;
+				? `👑 Game #${state.gameId}: ${victory.winner} achieves solo victory!\n\n${standings}`
+				: `Game #${state.gameId} has ended — draw agreed.\n\n${standings}`;
 
 			if (adjResult.svg) {
 				await postWithMapSvg(agent, msg, adjResult.svg, `Final map — Game #${state.gameId}`);
@@ -567,8 +575,12 @@ export function createGameManager(deps: GameManagerDeps) {
 			return;
 		}
 
-		// Advance to next phase
-		const advanced = advancePhase(state, adjResult.phase, adjResult.gameState, config);
+		// Advance to next phase, store latest centers/units for status queries
+		const advanced = {
+			...advancePhase(state, adjResult.phase, adjResult.gameState, config),
+			lastCenters: adjResult.centers,
+			lastUnits: adjResult.units,
+		};
 		db.saveGame(advanced);
 
 		// Parse phase for display
@@ -577,7 +589,10 @@ export function createGameManager(deps: GameManagerDeps) {
 		const phaseTypeName =
 			phase.type === 'M' ? 'Movement' : phase.type === 'R' ? 'Retreats' : 'Adjustments';
 
-		const phaseMsg = `📜 Game #${state.gameId}: ${seasonName} ${phase.year} ${phaseTypeName}\n\n${formatCenterCounts(adjResult.centers)}\n\nDeadline: ${advanced.phaseDeadline}`;
+		const deadlineDisplay = advanced.phaseDeadline
+			? formatRelativeDeadline(advanced.phaseDeadline)
+			: '?';
+		const phaseMsg = `📜 Game #${state.gameId}: ${seasonName} ${phase.year} ${phaseTypeName}\n\n${formatCenterCounts(adjResult.centers)}\n\nDeadline: ${deadlineDisplay}`;
 
 		if (adjResult.svg) {
 			await postWithMapSvg(
@@ -646,3 +661,29 @@ DM queries:
 #id orders — See submitted orders
 
 H=hold, -=move, S=support, C=convoy`;
+
+function formatStandings(state: GameState, centers: Record<string, string[]>): string {
+	return Object.entries(centers)
+		.filter(([_, c]) => c.length > 0)
+		.sort((a, b) => b[1].length - a[1].length)
+		.map(([power, c]) => {
+			const player = state.players.find((p) => p.power === power);
+			const handle = player ? `@${player.handle}` : 'Civil Disorder';
+			return `${power} (${handle}): ${c.length}`;
+		})
+		.join('\n');
+}
+
+function formatRelativeDeadline(isoDeadline: string): string {
+	const diff = new Date(isoDeadline).getTime() - Date.now();
+	if (diff <= 0) return 'passed';
+	const hours = Math.floor(diff / (60 * 60 * 1000));
+	const minutes = Math.floor((diff % (60 * 60 * 1000)) / (60 * 1000));
+	if (hours >= 24) {
+		const days = Math.floor(hours / 24);
+		const remainingHours = hours % 24;
+		return `${days}d ${remainingHours}h remaining`;
+	}
+	if (hours > 0) return `${hours}h ${minutes}m remaining`;
+	return `${minutes}m remaining`;
+}

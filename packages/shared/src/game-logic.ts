@@ -24,6 +24,8 @@ export function createGame(gameId: string, now = new Date().toISOString()): Game
 		drawVote: { votedPowers: [] },
 		phaseDeadline: null,
 		announcementPost: null,
+		lastCenters: null,
+		lastUnits: null,
 		diplomacyState: null,
 	};
 }
