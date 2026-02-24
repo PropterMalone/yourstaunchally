@@ -143,6 +143,12 @@ export interface GameState {
 	/** Bluesky post references for threading */
 	announcementPost: { uri: string; cid: string } | null;
 
+	/** Supply centers per power after last adjudication. Null before first adjudication. */
+	lastCenters: Record<string, string[]> | null;
+
+	/** Units per power after last adjudication. Null before first adjudication. */
+	lastUnits: Record<string, string[]> | null;
+
 	/**
 	 * Serialized game state from the Python diplomacy library.
 	 * Opaque to TypeScript — passed back to Python for adjudication.
