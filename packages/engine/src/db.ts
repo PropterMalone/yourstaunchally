@@ -27,8 +27,14 @@ export interface GameDb {
 	getBotState(key: string): string | null;
 	setBotState(key: string, value: string): void;
 
-	/** Record a game post for feed/threading */
-	recordGamePost(gameId: string, postUri: string, postCid: string, postType: string): void;
+	/** Record a game post for the feed generator */
+	recordGamePost(
+		uri: string,
+		gameId: string,
+		authorDid: string,
+		kind: string,
+		phase: string | null,
+	): void;
 
 	/** Close the database */
 	close(): void;
@@ -58,16 +64,15 @@ export function createDb(config: DbConfig): GameDb {
 				);
 
 				CREATE TABLE IF NOT EXISTS game_posts (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					uri TEXT PRIMARY KEY,
 					game_id TEXT NOT NULL,
-					post_uri TEXT NOT NULL UNIQUE,
-					post_cid TEXT NOT NULL,
-					post_type TEXT NOT NULL,
-					created_at TEXT NOT NULL DEFAULT (datetime('now')),
-					FOREIGN KEY (game_id) REFERENCES games(game_id)
+					author_did TEXT NOT NULL,
+					kind TEXT NOT NULL,
+					phase TEXT,
+					indexed_at INTEGER NOT NULL
 				);
 
-				CREATE INDEX IF NOT EXISTS idx_game_posts_game ON game_posts(game_id);
+				CREATE INDEX IF NOT EXISTS idx_game_posts_game_id ON game_posts(game_id, indexed_at);
 			`);
 		},
 
@@ -124,11 +129,17 @@ export function createDb(config: DbConfig): GameDb {
 			`).run(key, value);
 		},
 
-		recordGamePost(gameId: string, postUri: string, postCid: string, postType: string) {
+		recordGamePost(
+			uri: string,
+			gameId: string,
+			authorDid: string,
+			kind: string,
+			phase: string | null,
+		) {
 			db.prepare(`
-				INSERT OR IGNORE INTO game_posts (game_id, post_uri, post_cid, post_type)
-				VALUES (?, ?, ?, ?)
-			`).run(gameId, postUri, postCid, postType);
+				INSERT OR IGNORE INTO game_posts (uri, game_id, author_did, kind, phase, indexed_at)
+				VALUES (?, ?, ?, ?, ?, ?)
+			`).run(uri, gameId, authorDid, kind, phase, Date.now());
 		},
 
 		close() {
