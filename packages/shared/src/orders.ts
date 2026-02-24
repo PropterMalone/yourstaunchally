@@ -162,5 +162,9 @@ export function parseOrders(input: string): ParseOrderResult[] {
  * Uppercases, trims whitespace, normalizes spaces.
  */
 export function normalizeOrderString(order: string): string {
-	return order.trim().toUpperCase().replace(/\s+/g, ' ');
+	return order
+		.trim()
+		.toUpperCase()
+		.replace(/\s+/g, ' ')
+		.replace(/\s*-\s*/g, ' - '); // normalize A MUN-BUR or A MUN -BUR → A MUN - BUR
 }

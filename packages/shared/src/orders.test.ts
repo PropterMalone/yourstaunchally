@@ -191,4 +191,10 @@ describe('normalizeOrderString', () => {
 	it('collapses multiple spaces', () => {
 		expect(normalizeOrderString('A  PAR   -   BUR')).toBe('A PAR - BUR');
 	});
+
+	it('normalizes missing spaces around dashes', () => {
+		expect(normalizeOrderString('A MUN -SIL')).toBe('A MUN - SIL');
+		expect(normalizeOrderString('A MUN- SIL')).toBe('A MUN - SIL');
+		expect(normalizeOrderString('A MUN-SIL')).toBe('A MUN - SIL');
+	});
 });

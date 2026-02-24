@@ -33,7 +33,7 @@ async function main() {
 
 	const record = {
 		did: feedServiceDid,
-		displayName: 'YourStaunchAlly — Diplomacy',
+		displayName: 'YourStaunchAlly',
 		description: 'Diplomacy games on Bluesky. Follow game announcements, phase results, and maps.',
 		createdAt: new Date().toISOString(),
 	};

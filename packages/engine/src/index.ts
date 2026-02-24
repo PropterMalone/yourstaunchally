@@ -17,6 +17,7 @@ import {
 	pollInboundDms,
 } from './dm.js';
 import { createGameManager } from './game-manager.js';
+import { createLlmClient } from './llm.js';
 
 const POLL_INTERVAL_MS = 15_000; // 15 seconds
 const MAX_BACKOFF_MS = 5 * 60 * 1000; // 5 minutes
@@ -75,10 +76,35 @@ async function main() {
 	const dmSender =
 		useLiveDms && chatAgent ? createBlueskyDmSender(chatAgent) : createConsoleDmSender();
 
-	const manager = createGameManager({ agent, dmSender, db });
+	// LLM for in-character DM responses (optional — degrades gracefully)
+	const llm = process.env['OLLAMA_URL'] ? createLlmClient() : null;
+	if (llm) {
+		const available = await llm.isAvailable();
+		console.log(
+			`[init] LLM: ${available ? 'connected' : 'not available (will retry per-request)'}`,
+		);
+	}
+
+	const manager = createGameManager({ agent, dmSender, db, llm: llm ?? undefined });
 
 	// DM cursor persisted to DB (TID-based, lexicographic order)
 	let dmCursor = db.getBotState('dm_cursor') ?? undefined;
+
+	// Old account DM forwarding — keep reading DMs sent to the old handle
+	const oldIdentifier = process.env['OLD_BSKY_IDENTIFIER'];
+	const oldPassword = process.env['OLD_BSKY_PASSWORD'];
+	let oldAgent: Awaited<ReturnType<typeof createAgent>> | null = null;
+	let oldChatAgent: ReturnType<typeof createChatAgent> | null = null;
+	let oldDmCursor = db.getBotState('old_dm_cursor') ?? undefined;
+	if (oldIdentifier && oldPassword && useLiveDms) {
+		try {
+			oldAgent = await createAgent({ identifier: oldIdentifier, password: oldPassword });
+			oldChatAgent = createChatAgent(oldAgent);
+			console.log(`[init] Old account ${oldIdentifier} logged in for DM forwarding`);
+		} catch (err) {
+			console.warn('[init] Old account login failed (DM forwarding disabled):', err);
+		}
+	}
 
 	let backoffMs = POLL_INTERVAL_MS;
 	let pollCount = 0;
@@ -155,6 +181,46 @@ async function main() {
 				hadError = true;
 				console.error('[poll] Error polling DMs:', error);
 				if (isAuthError(error)) await refreshSession();
+			}
+		}
+
+		// -- Old account DMs (forward to game manager + nudge sender to new account) --
+		if (oldChatAgent) {
+			try {
+				const { messages, latestMessageId } = await withTimeout(
+					() => pollInboundDms(oldChatAgent, oldDmCursor),
+					POLL_TIMEOUT_MS,
+					'pollOldDms',
+				);
+
+				if (latestMessageId) {
+					oldDmCursor = latestMessageId;
+					db.setBotState('old_dm_cursor', latestMessageId);
+				}
+
+				for (const dm of messages) {
+					try {
+						// Process the DM normally (orders still work)
+						await manager.handleDm(dm);
+						// Nudge them to the new account
+						const oldDmSender = createBlueskyDmSender(oldChatAgent);
+						await oldDmSender.sendDm(
+							dm.senderDid,
+							'Hey! I moved to a new account: @yrstaunchally.bsky.social\n\nI processed your message this time, but please follow and DM the new account going forward.',
+						);
+					} catch (error) {
+						console.error('[old-dm] Error handling forwarded DM:', error);
+					}
+				}
+			} catch (error) {
+				// Non-fatal — old account DM polling is best-effort
+				if (isAuthError(error) && oldAgent && oldIdentifier && oldPassword) {
+					try {
+						await oldAgent.login({ identifier: oldIdentifier, password: oldPassword });
+					} catch {
+						/* ignore */
+					}
+				}
 			}
 		}
 

@@ -142,7 +142,28 @@ describe('parseDm', () => {
 		});
 	});
 
-	it('handles game ID with no content', () => {
-		expect(parseDm('#abc123')).toEqual({ type: 'unknown', text: '#abc123' });
+	it('returns game_menu for bare game ID', () => {
+		expect(parseDm('#abc123')).toEqual({ type: 'game_menu', gameId: 'abc123' });
+	});
+
+	it('parses "help" DM', () => {
+		expect(parseDm('help')).toEqual({ type: 'help' });
+	});
+
+	it('parses "?" DM', () => {
+		expect(parseDm('?')).toEqual({ type: 'help' });
+	});
+
+	it('strips smart quotes from keyword commands', () => {
+		expect(parseDm('#abc123 possible\u201D')).toEqual({ type: 'show_possible', gameId: 'abc123' });
+		expect(parseDm('#abc123 orders.')).toEqual({ type: 'show_orders', gameId: 'abc123' });
+	});
+
+	it('accepts "status" as show_orders alias', () => {
+		expect(parseDm('#abc123 status')).toEqual({ type: 'show_orders', gameId: 'abc123' });
+	});
+
+	it('accepts "#gameId help" as show_possible', () => {
+		expect(parseDm('#abc123 help')).toEqual({ type: 'show_possible', gameId: 'abc123' });
 	});
 });

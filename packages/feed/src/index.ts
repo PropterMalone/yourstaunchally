@@ -13,9 +13,10 @@ import { createFeedHandler } from './handler.js';
 
 const PORT = Number(process.env['FEED_PORT']) || 3001;
 const DB_PATH = process.env['DB_PATH'] || '/data/yourstaunchally.db';
-const PUBLISHER_DID = process.env['FEED_PUBLISHER_DID'] ?? 'did:web:diplo.example';
+const SERVICE_DID = process.env['FEED_PUBLISHER_DID'] ?? 'did:web:diplo.example';
+const BOT_DID = process.env['FEED_BOT_DID'] ?? SERVICE_DID;
 
-const handler = createFeedHandler(DB_PATH, PUBLISHER_DID);
+const handler = createFeedHandler(DB_PATH, BOT_DID);
 
 const server = createServer(async (req, res) => {
 	const url = new URL(req.url ?? '/', `http://localhost:${PORT}`);
@@ -37,7 +38,7 @@ const server = createServer(async (req, res) => {
 		res.writeHead(200, { 'Content-Type': 'application/json' });
 		res.end(
 			JSON.stringify({
-				did: PUBLISHER_DID,
+				did: SERVICE_DID,
 				feeds: handler.listFeeds(),
 			}),
 		);
@@ -50,7 +51,7 @@ const server = createServer(async (req, res) => {
 		res.end(
 			JSON.stringify({
 				'@context': ['https://www.w3.org/ns/did/v1'],
-				id: PUBLISHER_DID,
+				id: SERVICE_DID,
 				service: [
 					{
 						id: '#bsky_fg',

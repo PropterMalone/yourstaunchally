@@ -46,6 +46,7 @@ import {
 } from './commentary.js';
 import type { GameDb } from './db.js';
 import type { DmSender, InboundDm } from './dm.js';
+import type { LlmClient } from './llm.js';
 import { postWithMapSvg } from './map-renderer.js';
 
 export interface GameManagerDeps {
@@ -58,12 +59,15 @@ export interface GameManagerDeps {
 		newGame: typeof newGame;
 		setOrdersAndProcess: typeof setOrdersAndProcess;
 	};
+	/** Optional LLM client for in-character DM responses */
+	llm?: LlmClient;
 }
 
 export function createGameManager(deps: GameManagerDeps) {
 	const { agent, dmSender, db } = deps;
 	const config = deps.config ?? DEFAULT_GAME_CONFIG;
 	const adj = deps.adjudicator ?? { newGame, setOrdersAndProcess };
+	const llm = deps.llm ?? null;
 
 	const botDid = agent.session?.did ?? '';
 
@@ -264,7 +268,7 @@ export function createGameManager(deps: GameManagerDeps) {
 				try {
 					await dmSender.sendDm(
 						player.did,
-						`Game #${started.gameId} has started! You are ${player.power}.\n\n${powerAssignmentCommentary(player.power)}\n\nYour units: ${unitList}\n\nSubmit orders via DM:\n#${started.gameId} ${exampleOrder}; ...\n\nSeparate orders with semicolons. DM "#${started.gameId} possible" to see all options.\n\nDeadline: ${started.phaseDeadline}`,
+						`Game #${started.gameId} has started! You are ${player.power}.\n\n${powerAssignmentCommentary(player.power)}\n\nYour units: ${unitList}\n\nSubmit orders via DM:\n#${started.gameId} ${exampleOrder}; ...\n\nSeparate orders with semicolons. DM "#${started.gameId} possible" to see all options.\n\nDeadline: ${started.phaseDeadline ? formatAbsoluteDeadline(started.phaseDeadline) : '?'}`,
 					);
 				} catch (error) {
 					console.warn(`[dm] Failed to DM ${player.handle}: ${error}`);
@@ -489,7 +493,7 @@ export function createGameManager(deps: GameManagerDeps) {
 				const unitList = unitLocs.length > 0 ? unitLocs.join(', ') : 'No units this phase';
 				await dmSender.sendDm(
 					notification.authorDid,
-					`Welcome to game #${command.gameId}! You are ${power}.\n\nOrderable locations: ${unitList}\n\nDM "#${command.gameId} possible" to see all options.\nDeadline: ${state.phaseDeadline}`,
+					`Welcome to game #${command.gameId}! You are ${power}.\n\nOrderable locations: ${unitList}\n\nDM "#${command.gameId} possible" to see all options.\nDeadline: ${state.phaseDeadline ? formatAbsoluteDeadline(state.phaseDeadline) : '?'}`,
 				);
 			} catch (error) {
 				console.warn(`[dm] Failed to DM ${notification.authorHandle}: ${error}`);
@@ -513,11 +517,20 @@ export function createGameManager(deps: GameManagerDeps) {
 			case 'my_games':
 				await handleMyGames(dm);
 				break;
-			case 'unknown':
+			case 'help':
 				await dmSender.sendDm(
 					dm.senderDid,
-					"I didn't understand that. Send orders like: #gameId A PAR - BUR; A MAR - SPA",
+					'DM commands:\n\n#gameId A PAR - BUR; F BRE - MAO \u2014 Submit orders\n#gameId possible \u2014 See legal orders\n#gameId orders \u2014 Review submitted orders\nmy games \u2014 List your active games\n\nSeparate orders with semicolons. All deadlines are UTC.',
 				);
+				break;
+			case 'game_menu':
+				await dmSender.sendDm(
+					dm.senderDid,
+					`Game #${command.gameId} \u2014 what would you like to do?\n\n#${command.gameId} possible \u2014 See legal orders\n#${command.gameId} orders \u2014 Review submitted orders\n#${command.gameId} A PAR - BUR; ... \u2014 Submit orders`,
+				);
+				break;
+			case 'unknown':
+				await handleUnknownDm(dm);
 				break;
 		}
 	}
@@ -731,6 +744,36 @@ export function createGameManager(deps: GameManagerDeps) {
 		await dmSender.sendDm(dm.senderDid, `Your games:\n${lines.join('\n')}`);
 	}
 
+	/** Handle unrecognized DMs — use LLM for in-character response, or stay silent */
+	async function handleUnknownDm(dm: InboundDm): Promise<void> {
+		if (!llm) return; // No LLM configured — stay silent
+
+		// Find the player's game context for the LLM prompt
+		const activeGames = db.loadActiveGames();
+		const playerGame = activeGames.find((g) => g.players.some((p) => p.did === dm.senderDid));
+
+		if (!playerGame) return; // Not a player — ignore
+
+		const player = playerGame.players.find((p) => p.did === dm.senderDid);
+		const power = player?.power ?? 'Unknown';
+
+		try {
+			const response = await llm.generateResponse({
+				power,
+				phase: playerGame.currentPhase ?? 'unknown',
+				situation: 'chat',
+				playerMessage: dm.text,
+			});
+
+			if (response) {
+				await dmSender.sendDm(dm.senderDid, response);
+			}
+		} catch (error) {
+			// LLM failure is non-fatal — just stay silent
+			console.warn(`[llm] Failed to generate response: ${error}`);
+		}
+	}
+
 	/** Process the current phase — adjudicate, update state, post results.
 	 *  Guarded by per-game lock to prevent double-adjudication from concurrent
 	 *  tick() deadline + handleOrderSubmission completing at the same moment. */
@@ -859,7 +902,7 @@ export function createGameManager(deps: GameManagerDeps) {
 					try {
 						await dmSender.sendDm(
 							player.did,
-							`New phase: ${adjResult.phase} in #${state.gameId}\n\n${unitList}\n\nSubmit orders: #${state.gameId} ...\nDeadline: ${advanced.phaseDeadline}`,
+							`New phase: ${adjResult.phase} in #${state.gameId}\n\n${unitList}\n\nSubmit orders: #${state.gameId} ...\nDeadline: ${advanced.phaseDeadline ? formatAbsoluteDeadline(advanced.phaseDeadline) : '?'}`,
 						);
 					} catch (error) {
 						console.warn(`[dm] Failed to DM ${player.handle}: ${error}`);
@@ -871,12 +914,80 @@ export function createGameManager(deps: GameManagerDeps) {
 		}
 	}
 
+	/** Status update interval escalates as deadline approaches:
+	 *  >12h remaining → every 12h
+	 *  9-12h → every 3h
+	 *  6-9h → every 3h
+	 *  1-6h → every 1h
+	 *  30m-1h → every 30m
+	 *  <30m → every 15m */
+	function statusUpdateInterval(msRemaining: number): number {
+		const HOUR = 60 * 60 * 1000;
+		if (msRemaining > 12 * HOUR) return 12 * HOUR;
+		if (msRemaining > 6 * HOUR) return 3 * HOUR;
+		if (msRemaining > 1 * HOUR) return 1 * HOUR;
+		if (msRemaining > 30 * 60 * 1000) return 30 * 60 * 1000;
+		return 15 * 60 * 1000;
+	}
+
+	/** Post a periodic status update for a game if enough time has passed */
+	async function maybePostStatusUpdate(state: GameState): Promise<void> {
+		if (!state.phaseDeadline) return;
+
+		const lastStatusKey = `status_post_${state.gameId}`;
+		const lastStatus = db.getBotState(lastStatusKey);
+		const now = Date.now();
+		const msRemaining = new Date(state.phaseDeadline).getTime() - now;
+		const interval = statusUpdateInterval(msRemaining);
+
+		if (lastStatus && now - Number(lastStatus) < interval) return;
+
+		const ordersIn = Object.keys(state.currentOrders).length;
+		const totalPlayers = state.players.filter((p) => p.power).length;
+
+		// Don't post if all orders are already in (grace period handles that)
+		if (ordersIn >= totalPlayers) return;
+
+		const timeLeft = formatRelativeDeadline(state.phaseDeadline as string);
+
+		const playerTags = state.players.map((p) => `@${p.handle}`).join(' ');
+		const statusMsg = `📊 Game #${state.gameId} — ${state.currentPhase}\n\n${ordersIn}/${totalPlayers} orders in. ${timeLeft}.\n\n${playerTags}`;
+
+		try {
+			const prevPost = db.getLatestGamePost(state.gameId);
+			const statusPost = prevPost
+				? await postWithQuote(agent, statusMsg, prevPost.uri, prevPost.cid)
+				: await postThread(agent, statusMsg);
+			db.recordGamePost(
+				statusPost.uri,
+				statusPost.cid,
+				state.gameId,
+				botDid,
+				'status',
+				state.currentPhase,
+			);
+			db.setBotState(lastStatusKey, String(now));
+			console.log(
+				`[status] Posted update for #${state.gameId}: ${ordersIn}/${totalPlayers} orders`,
+			);
+		} catch (error) {
+			console.warn(`[status] Failed to post update for #${state.gameId}: ${error}`);
+		}
+	}
+
 	/** Tick — check deadlines on all active games, process expired ones */
 	async function tick(): Promise<void> {
 		const activeGames = db.loadActiveGames();
 		const now = new Date();
 
 		for (const state of activeGames) {
+			// Periodic status update (non-blocking, before deadline check)
+			try {
+				await maybePostStatusUpdate(state);
+			} catch (error) {
+				console.warn(`[status] Error checking status update for #${state.gameId}: ${error}`);
+			}
+
 			if (isDeadlinePassed(state, now)) {
 				// Backoff: skip games that have failed too many times consecutively
 				const failures = gameFailureCount.get(state.gameId) ?? 0;
@@ -1004,4 +1115,28 @@ function formatRelativeDeadline(isoDeadline: string): string {
 	}
 	if (hours > 0) return `${hours}h ${minutes}m remaining`;
 	return `${minutes}m remaining`;
+}
+
+/** Format an ISO deadline as a readable absolute time for DMs: "Feb 26, 19:30 UTC" */
+function formatAbsoluteDeadline(isoDeadline: string): string {
+	const d = new Date(isoDeadline);
+	const months = [
+		'Jan',
+		'Feb',
+		'Mar',
+		'Apr',
+		'May',
+		'Jun',
+		'Jul',
+		'Aug',
+		'Sep',
+		'Oct',
+		'Nov',
+		'Dec',
+	];
+	const month = months[d.getUTCMonth()];
+	const day = d.getUTCDate();
+	const hour = d.getUTCHours().toString().padStart(2, '0');
+	const min = d.getUTCMinutes().toString().padStart(2, '0');
+	return `${month} ${day}, ${hour}:${min} UTC`;
 }
