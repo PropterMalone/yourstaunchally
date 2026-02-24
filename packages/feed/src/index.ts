@@ -8,6 +8,7 @@
  *   at://{publisher-did}/app.bsky.feed.generator/diplo-{gameId}
  */
 import { createServer } from 'node:http';
+import { FAQ_HTML } from './faq.js';
 import { createFeedHandler } from './handler.js';
 
 const PORT = Number(process.env['FEED_PORT']) || 3001;
@@ -59,6 +60,12 @@ const server = createServer(async (req, res) => {
 				],
 			}),
 		);
+		return;
+	}
+
+	if (url.pathname === '/faq') {
+		res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+		res.end(FAQ_HTML);
 		return;
 	}
 
