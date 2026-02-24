@@ -36,6 +36,8 @@ export type DmCommand =
 	| { type: 'show_orders'; gameId: string }
 	| { type: 'show_possible'; gameId: string }
 	| { type: 'my_games' }
+	| { type: 'help' }
+	| { type: 'game_menu'; gameId: string }
 	| { type: 'unknown'; text: string };
 
 const GAME_ID_RE = /#([a-z0-9]{4,8})/i;
@@ -112,6 +114,10 @@ export function parseDm(text: string): DmCommand {
 		return { type: 'my_games' };
 	}
 
+	if (lower === 'help' || lower === '?') {
+		return { type: 'help' };
+	}
+
 	const gameIdMatch = trimmed.match(GAME_ID_RE);
 
 	if (!gameIdMatch?.[1]) {
@@ -124,16 +130,27 @@ export function parseDm(text: string): DmCommand {
 	const rest = trimmed.slice(matchIndex + gameIdMatch[0].length).trim();
 
 	if (!rest || rest.length === 0) {
-		return { type: 'unknown', text: trimmed };
+		return { type: 'game_menu', gameId };
 	}
 
-	const lowerRest = rest.toLowerCase();
+	// Strip trailing punctuation/quotes for keyword matching (smart quotes, periods, etc.)
+	const lowerRest = rest.toLowerCase().replace(/[\s""\u201C\u201D''\u2018\u2019.,!?]+$/g, '');
 
-	if (lowerRest === 'orders' || lowerRest === 'my orders' || lowerRest === 'show orders') {
+	if (
+		lowerRest === 'orders' ||
+		lowerRest === 'my orders' ||
+		lowerRest === 'show orders' ||
+		lowerRest === 'status'
+	) {
 		return { type: 'show_orders', gameId };
 	}
 
-	if (lowerRest === 'possible' || lowerRest === 'options' || lowerRest === 'show possible') {
+	if (
+		lowerRest === 'possible' ||
+		lowerRest === 'options' ||
+		lowerRest === 'show possible' ||
+		lowerRest === 'help'
+	) {
 		return { type: 'show_possible', gameId };
 	}
 
