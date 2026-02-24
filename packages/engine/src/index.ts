@@ -1,6 +1,12 @@
 /**
  * Entry point — polling loop for mentions and DMs.
- * Adapted from Skeetwolf's polling loop.
+ * Resilience features (learned from Skeetwolf):
+ * - Mention polling from page 1, not stale cursors
+ * - Exponential backoff on errors (15s → 5min cap)
+ * - Auth refresh on 401/ExpiredToken
+ * - Dedup set capped at 1000 to prevent unbounded memory growth
+ * - Timeout wrapping on all API calls
+ * - Heartbeat logging every 10 polls
  */
 import { createAgent, pollMentions } from './bot.js';
 import { createDb } from './db.js';
@@ -13,7 +19,39 @@ import {
 import { createGameManager } from './game-manager.js';
 
 const POLL_INTERVAL_MS = 15_000; // 15 seconds
-const TICK_INTERVAL_MS = 60_000; // 1 minute
+const MAX_BACKOFF_MS = 5 * 60 * 1000; // 5 minutes
+const POLL_TIMEOUT_MS = 60_000; // 1 minute per API call
+
+// Prevent silent death from unhandled async errors
+process.on('unhandledRejection', (error) => {
+	console.error('[unhandled rejection]', error);
+});
+
+/** Wrap an async call with a timeout */
+function withTimeout<T>(fn: () => Promise<T>, ms: number, label: string): Promise<T> {
+	return new Promise<T>((resolve, reject) => {
+		const timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+		fn().then(
+			(val) => {
+				clearTimeout(timer);
+				resolve(val);
+			},
+			(err) => {
+				clearTimeout(timer);
+				reject(err);
+			},
+		);
+	});
+}
+
+/** Detect auth errors that need session refresh */
+function isAuthError(err: unknown): boolean {
+	if (err instanceof Error && err.message.includes('ExpiredToken')) return true;
+	if (typeof err === 'object' && err !== null && 'status' in err) {
+		return (err as { status: number }).status === 401;
+	}
+	return false;
+}
 
 async function main() {
 	const identifier = process.env['BSKY_IDENTIFIER'];
@@ -39,20 +77,37 @@ async function main() {
 
 	const manager = createGameManager({ agent, dmSender, db });
 
-	// Restore cursors from DB
-	let mentionCursor = db.getBotState('mention_cursor') ?? undefined;
+	// DM cursor persisted to DB (TID-based, lexicographic order)
 	let dmCursor = db.getBotState('dm_cursor') ?? undefined;
+
+	let backoffMs = POLL_INTERVAL_MS;
+	let pollCount = 0;
 
 	console.log('[init] Starting polling loop...');
 
-	// Mention polling
-	async function pollMentionLoop() {
+	/** Try to refresh the session on auth errors */
+	async function refreshSession(): Promise<void> {
+		console.log('[auth] Refreshing session...');
 		try {
-			const { notifications, cursor } = await pollMentions(agent, mentionCursor);
-			if (cursor) {
-				mentionCursor = cursor;
-				db.setBotState('mention_cursor', cursor);
-			}
+			await agent.login({ identifier: identifier as string, password: password as string });
+			console.log('[auth] Session refreshed');
+		} catch (loginErr) {
+			console.error('[auth] Session refresh failed:', loginErr);
+		}
+	}
+
+	// Unified polling loop — mentions + DMs + tick
+	async function poll() {
+		pollCount++;
+		let hadError = false;
+
+		// -- Mentions --
+		try {
+			const { notifications } = await withTimeout(
+				() => pollMentions(agent),
+				POLL_TIMEOUT_MS,
+				'pollMentions',
+			);
 
 			if (notifications.length > 0) {
 				console.log(`[poll] Found ${notifications.length} mention(s)`);
@@ -66,58 +121,79 @@ async function main() {
 				}
 			}
 		} catch (error) {
+			hadError = true;
 			console.error('[poll] Error polling mentions:', error);
+			if (isAuthError(error)) await refreshSession();
 		}
 
-		setTimeout(pollMentionLoop, POLL_INTERVAL_MS);
-	}
+		// -- DMs --
+		if (chatAgent) {
+			try {
+				const { messages, latestMessageId } = await withTimeout(
+					() => pollInboundDms(chatAgent, dmCursor),
+					POLL_TIMEOUT_MS,
+					'pollInboundDms',
+				);
 
-	// DM polling
-	async function pollDmLoop() {
-		if (!chatAgent) {
-			setTimeout(pollDmLoop, POLL_INTERVAL_MS);
-			return;
-		}
-
-		try {
-			const { messages, latestMessageId } = await pollInboundDms(chatAgent, dmCursor);
-			if (latestMessageId) {
-				dmCursor = latestMessageId;
-				db.setBotState('dm_cursor', latestMessageId);
-			}
-
-			if (messages.length > 0) {
-				console.log(`[poll] Found ${messages.length} DM(s)`);
-			}
-
-			for (const dm of messages) {
-				try {
-					await manager.handleDm(dm);
-				} catch (error) {
-					console.error('[dm] Error handling DM:', error);
+				if (latestMessageId) {
+					dmCursor = latestMessageId;
+					db.setBotState('dm_cursor', latestMessageId);
 				}
+
+				if (messages.length > 0) {
+					console.log(`[poll] Found ${messages.length} DM(s)`);
+				}
+
+				for (const dm of messages) {
+					try {
+						await manager.handleDm(dm);
+					} catch (error) {
+						console.error('[dm] Error handling DM:', error);
+					}
+				}
+			} catch (error) {
+				hadError = true;
+				console.error('[poll] Error polling DMs:', error);
+				if (isAuthError(error)) await refreshSession();
 			}
-		} catch (error) {
-			console.error('[poll] Error polling DMs:', error);
 		}
 
-		setTimeout(pollDmLoop, POLL_INTERVAL_MS);
-	}
-
-	// Deadline tick
-	async function tickLoop() {
+		// -- Tick (always runs — phase timers must not stall) --
 		try {
 			await manager.tick();
 		} catch (error) {
+			hadError = true;
 			console.error('[tick] Error:', error);
 		}
 
-		setTimeout(tickLoop, TICK_INTERVAL_MS);
+		// Backoff on errors, reset on success
+		if (hadError) {
+			backoffMs = Math.min(backoffMs * 2, MAX_BACKOFF_MS);
+			console.log(`[backoff] Next poll in ${Math.round(backoffMs / 1000)}s`);
+		} else {
+			backoffMs = POLL_INTERVAL_MS;
+		}
+
+		// Heartbeat
+		if (pollCount % 10 === 0) {
+			const activeCount = db.loadActiveGames().length;
+			console.log(`[heartbeat] poll #${pollCount}, ${activeCount} active game(s)`);
+		}
+
+		setTimeout(poll, backoffMs);
 	}
 
-	pollMentionLoop();
-	pollDmLoop();
-	tickLoop();
+	poll();
+
+	// Graceful shutdown — close DB cleanly on Docker stop/restart
+	function shutdown(signal: string) {
+		console.log(`[shutdown] Received ${signal}, closing DB...`);
+		db.close();
+		console.log('[shutdown] Done.');
+		process.exit(0);
+	}
+	process.on('SIGTERM', () => shutdown('SIGTERM'));
+	process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
 main().catch((error) => {

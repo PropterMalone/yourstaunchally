@@ -3,6 +3,7 @@
  */
 import type { AtpAgent } from '@atproto/api';
 import sharp from 'sharp';
+import { truncateToLimit } from './bot.js';
 
 /** Convert SVG string to PNG buffer */
 export async function svgToPng(svg: string): Promise<Buffer> {
@@ -23,7 +24,8 @@ export async function postWithMapSvg(
 	const blobRef = uploadResponse.data.blob;
 
 	const { RichText } = await import('@atproto/api');
-	const rt = new RichText({ text });
+	const truncated = truncateToLimit(text);
+	const rt = new RichText({ text: truncated });
 	await rt.detectFacets(agent);
 
 	const record: Record<string, unknown> = {

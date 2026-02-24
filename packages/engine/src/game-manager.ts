@@ -27,10 +27,23 @@ import {
 	submitOrders,
 	voteDraw,
 } from '@yourstaunchally/shared';
-import { newGame, setOrdersAndProcess } from './adjudicator.js';
+import { newGame, renderMap, setOrdersAndProcess } from './adjudicator.js';
 import type { MentionNotification } from './bot.js';
-import { postMessage, replyToPost } from './bot.js';
+import { postMessage, postThread, postWithQuote, replyThread } from './bot.js';
 import { type DmCommand, type MentionCommand, parseDm, parseMention } from './command-parser.js';
+import {
+	allOrdersInCommentary,
+	centerChangeCommentary,
+	drawCommentary,
+	gameStartCommentary,
+	illegalOrderAnnotation,
+	illegalOrderCommentary,
+	legalOrderAnnotation,
+	nearVictoryCommentary,
+	phaseCommentary,
+	powerAssignmentCommentary,
+	soloVictoryCommentary,
+} from './commentary.js';
 import type { GameDb } from './db.js';
 import type { DmSender, InboundDm } from './dm.js';
 import { postWithMapSvg } from './map-renderer.js';
@@ -54,17 +67,33 @@ export function createGameManager(deps: GameManagerDeps) {
 
 	const botDid = agent.session?.did ?? '';
 
-	/** Set of processed mention URIs — prevents double-handling across polls */
+	/** Set of processed mention URIs — prevents double-handling across polls.
+	 *  Capped at 1000 entries to prevent unbounded memory growth. */
 	const processedMentionUris = new Set<string>();
+	const DEDUP_SET_MAX = 1000;
+	const DEDUP_SET_EVICT = 500;
+
+	/** Per-game lock — prevents double-adjudication from concurrent tick + order submission */
+	const processingGames = new Set<string>();
+
+	/** Per-game consecutive failure count — backoff to avoid hammering a broken adjudicator */
+	const gameFailureCount = new Map<string, number>();
+	const MAX_CONSECUTIVE_FAILURES = 3;
 
 	async function handleMention(notification: MentionNotification): Promise<void> {
 		if (processedMentionUris.has(notification.uri)) return;
 		if (notification.authorDid === botDid) return;
 		processedMentionUris.add(notification.uri);
 
+		// Cap dedup set to prevent unbounded memory growth
+		if (processedMentionUris.size > DEDUP_SET_MAX) {
+			const toDelete = [...processedMentionUris].slice(0, DEDUP_SET_EVICT);
+			for (const uri of toDelete) processedMentionUris.delete(uri);
+		}
+
 		const command = parseMention(notification.text);
 		const reply = async (text: string) => {
-			await replyToPost(
+			await replyThread(
 				agent,
 				text,
 				notification.uri,
@@ -126,15 +155,16 @@ export function createGameManager(deps: GameManagerDeps) {
 		}
 		state = joinResult.state;
 
-		// Post the announcement
+		// Persist before posting (crash-safe — if post fails, game still exists in DB)
+		db.saveGame(state);
+
 		const announcement = await postMessage(
 			agent,
 			`🎺 New Diplomacy game #${gameId}!\n\nMention me with "join #${gameId}" to play. Need 3-7 players.\n\n1/7: @${notification.authorHandle}`,
 		);
 		state = { ...state, announcementPost: announcement };
-
 		db.saveGame(state);
-		db.recordGamePost(announcement.uri, gameId, botDid, 'announcement', null);
+		db.recordGamePost(announcement.uri, announcement.cid, gameId, botDid, 'announcement', null);
 
 		await reply(`Game #${gameId} created! Waiting for players (1/${config.maxPlayers}).`);
 	}
@@ -234,7 +264,7 @@ export function createGameManager(deps: GameManagerDeps) {
 				try {
 					await dmSender.sendDm(
 						player.did,
-						`Game #${started.gameId} has started! You are ${player.power}.\n\nYour units: ${unitList}\n\nSubmit orders via DM:\n#${started.gameId} ${exampleOrder}; ...\n\nSeparate orders with semicolons. DM "#${started.gameId} possible" to see all options.\n\nDeadline: ${started.phaseDeadline}`,
+						`Game #${started.gameId} has started! You are ${player.power}.\n\n${powerAssignmentCommentary(player.power)}\n\nYour units: ${unitList}\n\nSubmit orders via DM:\n#${started.gameId} ${exampleOrder}; ...\n\nSeparate orders with semicolons. DM "#${started.gameId} possible" to see all options.\n\nDeadline: ${started.phaseDeadline}`,
 					);
 				} catch (error) {
 					console.warn(`[dm] Failed to DM ${player.handle}: ${error}`);
@@ -252,11 +282,32 @@ export function createGameManager(deps: GameManagerDeps) {
 		const civilDisorder =
 			unassigned.length > 0 ? `\n\nCivil disorder: ${unassigned.join(', ')}` : '';
 
-		const startPost = await postMessage(
-			agent,
-			`⚔️ Game #${started.gameId} begins! Phase: ${started.currentPhase}\n\n${powerList}${civilDisorder}\n\nDeadline: ${started.phaseDeadline}`,
+		const deadlineDisplay = started.phaseDeadline
+			? formatRelativeDeadline(started.phaseDeadline)
+			: '?';
+		const startMsg = `⚔️ Game #${started.gameId} begins! ${gameStartCommentary()}\n\n${powerList}${civilDisorder}\n\nPhase: ${started.currentPhase} | Deadline: ${deadlineDisplay}`;
+
+		let startPost: { uri: string; cid: string };
+		try {
+			const map = await renderMap(started.diplomacyState);
+			startPost = await postWithMapSvg(
+				agent,
+				startMsg,
+				map.svg,
+				`Diplomacy map — Game #${started.gameId} opening`,
+			);
+		} catch (error) {
+			console.warn(`[map] Failed to render start map: ${error}`);
+			startPost = await postThread(agent, startMsg);
+		}
+		db.recordGamePost(
+			startPost.uri,
+			startPost.cid,
+			started.gameId,
+			botDid,
+			'game_start',
+			started.currentPhase,
 		);
-		db.recordGamePost(startPost.uri, started.gameId, botDid, 'game_start', started.currentPhase);
 
 		// Register per-game feed on Bluesky
 		try {
@@ -354,11 +405,18 @@ export function createGameManager(deps: GameManagerDeps) {
 			const standings = result.state.lastCenters
 				? `\n\n${formatStandings(result.state, result.state.lastCenters)}`
 				: '';
-			const drawPost = await postMessage(
+			const drawPost = await postThread(
 				agent,
 				`🤝 Game #${command.gameId} ends in a draw!${standings}`,
 			);
-			db.recordGamePost(drawPost.uri, command.gameId, botDid, 'game_over', state.currentPhase);
+			db.recordGamePost(
+				drawPost.uri,
+				drawPost.cid,
+				command.gameId,
+				botDid,
+				'game_over',
+				state.currentPhase,
+			);
 		} else {
 			const total = state.players.filter((p) => p.power).length;
 			await reply(
@@ -388,7 +446,14 @@ export function createGameManager(deps: GameManagerDeps) {
 		const abandoned = abandonGame(state);
 		db.saveGame(abandoned);
 		const abandonPost = await postMessage(agent, `❌ Game #${command.gameId} has been abandoned.`);
-		db.recordGamePost(abandonPost.uri, command.gameId, botDid, 'game_over', state.currentPhase);
+		db.recordGamePost(
+			abandonPost.uri,
+			abandonPost.cid,
+			command.gameId,
+			botDid,
+			'game_over',
+			state.currentPhase,
+		);
 	}
 
 	async function handleClaim(
@@ -482,15 +547,91 @@ export function createGameManager(deps: GameManagerDeps) {
 
 		db.saveGame(result.state);
 
-		const orderSummary = orders.join('\n');
-		await dmSender.sendDm(
-			dm.senderDid,
-			`✓ Orders for ${power} in #${command.gameId} (${orders.length} order${orders.length === 1 ? '' : 's'}):\n${orderSummary}\n\nSend new orders to replace these. DM "#${command.gameId} possible" to see all options.`,
-		);
+		// Validate each order against the legal set from the diplomacy engine
+		let illegalWarning = '';
+		if (state.diplomacyState) {
+			try {
+				const { getPossibleOrders } = await import('./adjudicator.js');
+				const possible = await getPossibleOrders(state.diplomacyState);
+				const powerOrders = possible.possibleOrders[power];
+				const allLegal = powerOrders ? Object.values(powerOrders).flat() : [];
 
-		// Check if all orders are now in
+				const annotated: string[] = [];
+				let illegalCount = 0;
+				for (const order of orders) {
+					if (allLegal.some((legal) => legal.toUpperCase() === order.toUpperCase())) {
+						annotated.push(legalOrderAnnotation(order));
+					} else {
+						annotated.push(illegalOrderAnnotation(order));
+						illegalCount++;
+					}
+				}
+
+				if (illegalCount > 0) {
+					illegalWarning = `\n\n${illegalOrderCommentary(illegalCount, orders.length)}`;
+				}
+
+				const orderSummary = annotated.join('\n');
+				await dmSender.sendDm(
+					dm.senderDid,
+					`Orders for ${power} in #${command.gameId} (${orders.length} order${orders.length === 1 ? '' : 's'}):\n${orderSummary}${illegalWarning}\n\nSend new orders to replace these.`,
+				);
+			} catch (error) {
+				// Validation failed — still confirm orders were saved, just skip validation
+				console.warn(`[orders] Validation failed for #${command.gameId}: ${error}`);
+				const orderSummary = orders.join('\n');
+				await dmSender.sendDm(
+					dm.senderDid,
+					`✓ Orders for ${power} in #${command.gameId} (${orders.length} order${orders.length === 1 ? '' : 's'}):\n${orderSummary}\n\nSend new orders to replace these. DM "#${command.gameId} possible" to see all options.`,
+				);
+			}
+		} else {
+			const orderSummary = orders.join('\n');
+			await dmSender.sendDm(
+				dm.senderDid,
+				`✓ Orders for ${power} in #${command.gameId} (${orders.length} order${orders.length === 1 ? '' : 's'}):\n${orderSummary}\n\nSend new orders to replace these. DM "#${command.gameId} possible" to see all options.`,
+			);
+		}
+
+		// All orders in → shorten deadline to 20-min grace period (so players can revise)
 		if (allOrdersSubmitted(result.state)) {
-			await processPhase(result.state);
+			const GRACE_PERIOD_MS = 20 * 60 * 1000;
+			const graceDeadline = new Date(Date.now() + GRACE_PERIOD_MS).toISOString();
+			const currentDeadline = result.state.phaseDeadline;
+
+			// Only shorten — never extend past the original deadline
+			if (!currentDeadline || new Date(graceDeadline) < new Date(currentDeadline)) {
+				const updated = { ...result.state, phaseDeadline: graceDeadline };
+				db.saveGame(updated);
+				console.log(
+					`[orders] All orders in for #${command.gameId}, grace period until ${graceDeadline}`,
+				);
+
+				// Public announcement (QT previous thread for connective tissue)
+				const graceMsg = `⏰ Game #${command.gameId} — all orders are in! ${allOrdersInCommentary()}\n\nAdjudication in 20 minutes. You may revise orders until then.`;
+				const prev = db.getLatestGamePost(command.gameId);
+				const gracePost = prev
+					? await postWithQuote(agent, graceMsg, prev.uri, prev.cid)
+					: await postThread(agent, graceMsg);
+				db.recordGamePost(
+					gracePost.uri,
+					gracePost.cid,
+					command.gameId,
+					botDid,
+					'grace_period',
+					result.state.currentPhase,
+				);
+
+				// DM all players
+				for (const player of result.state.players) {
+					if (player.did) {
+						await dmSender.sendDm(
+							player.did,
+							`⏰ All orders are in for #${command.gameId}. Adjudication in 20 minutes — DM revised orders now if you want to change anything.`,
+						);
+					}
+				}
+			}
 		}
 	}
 
@@ -590,96 +731,143 @@ export function createGameManager(deps: GameManagerDeps) {
 		await dmSender.sendDm(dm.senderDid, `Your games:\n${lines.join('\n')}`);
 	}
 
-	/** Process the current phase — adjudicate, update state, post results */
+	/** Process the current phase — adjudicate, update state, post results.
+	 *  Guarded by per-game lock to prevent double-adjudication from concurrent
+	 *  tick() deadline + handleOrderSubmission completing at the same moment. */
 	async function processPhase(state: GameState): Promise<void> {
 		if (!state.diplomacyState) return;
 
-		// Build orders map for the adjudicator
-		const ordersMap: Record<string, string[]> = {};
-		for (const power of POWERS) {
-			const phaseOrders = state.currentOrders[power];
-			if (phaseOrders) {
-				ordersMap[power] = phaseOrders.orders;
-			}
-			// Powers without orders → civil disorder (hold all units, handled by Python lib)
-		}
-
-		const adjResult = await adj.setOrdersAndProcess(
-			state.diplomacyState,
-			ordersMap,
-			true, // render map
-		);
-
-		// Check for solo victory
-		const victory = checkSoloVictory(adjResult.centers);
-		if (victory || adjResult.isGameDone) {
-			const finished = victory
-				? finishGameSoloVictory(state, victory.winner)
-				: {
-						...state,
-						status: 'finished' as const,
-						finishedAt: new Date().toISOString(),
-						endReason: 'draw' as const,
-						winner: null,
-					};
-
-			db.saveGame(finished);
-
-			const standings = formatStandings(state, adjResult.centers);
-			const msg = victory
-				? `👑 Game #${state.gameId}: ${victory.winner} achieves solo victory!\n\n${standings}`
-				: `Game #${state.gameId} has ended — draw agreed.\n\n${standings}`;
-
-			const victoryPost = adjResult.svg
-				? await postWithMapSvg(agent, msg, adjResult.svg, `Final map — Game #${state.gameId}`)
-				: await postMessage(agent, msg);
-			db.recordGamePost(victoryPost.uri, state.gameId, botDid, 'game_over', state.currentPhase);
+		// Acquire per-game lock — if already processing, skip silently
+		if (processingGames.has(state.gameId)) {
+			console.log(`[phase] Skipping #${state.gameId} — already being processed`);
 			return;
 		}
+		processingGames.add(state.gameId);
 
-		// Advance to next phase, store latest centers/units for status queries
-		const advanced = {
-			...advancePhase(state, adjResult.phase, adjResult.gameState, config),
-			lastCenters: adjResult.centers,
-			lastUnits: adjResult.units,
-		};
-		db.saveGame(advanced);
+		try {
+			// Build orders map for the adjudicator
+			const ordersMap: Record<string, string[]> = {};
+			for (const power of POWERS) {
+				const phaseOrders = state.currentOrders[power];
+				if (phaseOrders) {
+					ordersMap[power] = phaseOrders.orders;
+				}
+				// Powers without orders → civil disorder (hold all units, handled by Python lib)
+			}
 
-		// Parse phase for display
-		const phase = parsePhase(adjResult.phase);
-		const seasonName = phase.season === 'S' ? 'Spring' : phase.season === 'F' ? 'Fall' : 'Winter';
-		const phaseTypeName =
-			phase.type === 'M' ? 'Movement' : phase.type === 'R' ? 'Retreats' : 'Adjustments';
+			const adjResult = await adj.setOrdersAndProcess(
+				state.diplomacyState,
+				ordersMap,
+				true, // render map
+			);
 
-		const deadlineDisplay = advanced.phaseDeadline
-			? formatRelativeDeadline(advanced.phaseDeadline)
-			: '?';
-		const phaseMsg = `📜 Game #${state.gameId}: ${seasonName} ${phase.year} ${phaseTypeName}\n\n${formatCenterCounts(adjResult.centers)}\n\nDeadline: ${deadlineDisplay}`;
+			// Adjudication succeeded — clear failure count
+			gameFailureCount.delete(state.gameId);
 
-		const phasePost = adjResult.svg
-			? await postWithMapSvg(
-					agent,
-					phaseMsg,
-					adjResult.svg,
-					`Diplomacy map — ${seasonName} ${phase.year}`,
-				)
-			: await postMessage(agent, phaseMsg);
-		db.recordGamePost(phasePost.uri, state.gameId, botDid, 'phase', adjResult.phase);
+			// Check for solo victory
+			const victory = checkSoloVictory(adjResult.centers);
+			if (victory || adjResult.isGameDone) {
+				const finished = victory
+					? finishGameSoloVictory(state, victory.winner)
+					: {
+							...state,
+							status: 'finished' as const,
+							finishedAt: new Date().toISOString(),
+							endReason: 'draw' as const,
+							winner: null,
+						};
 
-		// Notify players about the new phase with their current units (non-fatal)
-		for (const player of advanced.players) {
-			if (player.power) {
-				const units = adjResult.units[player.power] ?? [];
-				const unitList = units.length > 0 ? `Your units: ${units.join(', ')}` : 'No units';
-				try {
-					await dmSender.sendDm(
-						player.did,
-						`New phase: ${adjResult.phase} in #${state.gameId}\n\n${unitList}\n\nSubmit orders: #${state.gameId} ...\nDeadline: ${advanced.phaseDeadline}`,
-					);
-				} catch (error) {
-					console.warn(`[dm] Failed to DM ${player.handle}: ${error}`);
+				db.saveGame(finished);
+
+				const standings = formatStandings(state, adjResult.centers);
+				const msg = victory
+					? `👑 Game #${state.gameId}: ${soloVictoryCommentary(victory.winner)}\n\n${standings}`
+					: `🤝 Game #${state.gameId}: ${drawCommentary()}\n\n${standings}`;
+
+				const prevPost = db.getLatestGamePost(state.gameId);
+				const victoryPost = adjResult.svg
+					? await postWithMapSvg(agent, msg, adjResult.svg, `Final map — Game #${state.gameId}`)
+					: prevPost
+						? await postWithQuote(agent, msg, prevPost.uri, prevPost.cid)
+						: await postThread(agent, msg);
+				db.recordGamePost(
+					victoryPost.uri,
+					victoryPost.cid,
+					state.gameId,
+					botDid,
+					'game_over',
+					state.currentPhase,
+				);
+				return;
+			}
+
+			// Advance to next phase, store latest centers/units for status queries
+			const advanced = {
+				...advancePhase(state, adjResult.phase, adjResult.gameState, config),
+				lastCenters: adjResult.centers,
+				lastUnits: adjResult.units,
+			};
+			db.saveGame(advanced);
+
+			// Parse phase for display
+			const phase = parsePhase(adjResult.phase);
+			const seasonName = phase.season === 'S' ? 'Spring' : phase.season === 'F' ? 'Fall' : 'Winter';
+			const phaseTypeName =
+				phase.type === 'M' ? 'Movement' : phase.type === 'R' ? 'Retreats' : 'Adjustments';
+
+			const deadlineDisplay = advanced.phaseDeadline
+				? formatRelativeDeadline(advanced.phaseDeadline)
+				: '?';
+
+			// Build center change commentary (compare before/after)
+			const centerChanges = buildCenterChangeLines(state.lastCenters ?? {}, adjResult.centers);
+
+			// Near-victory warning
+			const victoryWarnings = buildNearVictoryWarnings(adjResult.centers);
+
+			const extras = [...centerChanges, ...victoryWarnings];
+			const extrasBlock = extras.length > 0 ? `\n\n${extras.join('\n')}` : '';
+
+			const phaseMsg = `📜 Game #${state.gameId}: ${seasonName} ${phase.year} ${phaseTypeName}\n\n${phaseCommentary(phase.type)}\n\n${formatCenterCounts(adjResult.centers)}${extrasBlock}\n\nDeadline: ${deadlineDisplay}`;
+
+			// QT previous thread for connective tissue (maps skip QT — they're visual context)
+			const prevPost = db.getLatestGamePost(state.gameId);
+			const phasePost = adjResult.svg
+				? await postWithMapSvg(
+						agent,
+						phaseMsg,
+						adjResult.svg,
+						`Diplomacy map — ${seasonName} ${phase.year}`,
+					)
+				: prevPost
+					? await postWithQuote(agent, phaseMsg, prevPost.uri, prevPost.cid)
+					: await postThread(agent, phaseMsg);
+			db.recordGamePost(
+				phasePost.uri,
+				phasePost.cid,
+				state.gameId,
+				botDid,
+				'phase',
+				adjResult.phase,
+			);
+
+			// Notify players about the new phase with their current units (non-fatal)
+			for (const player of advanced.players) {
+				if (player.power) {
+					const units = adjResult.units[player.power] ?? [];
+					const unitList = units.length > 0 ? `Your units: ${units.join(', ')}` : 'No units';
+					try {
+						await dmSender.sendDm(
+							player.did,
+							`New phase: ${adjResult.phase} in #${state.gameId}\n\n${unitList}\n\nSubmit orders: #${state.gameId} ...\nDeadline: ${advanced.phaseDeadline}`,
+						);
+					} catch (error) {
+						console.warn(`[dm] Failed to DM ${player.handle}: ${error}`);
+					}
 				}
 			}
+		} finally {
+			processingGames.delete(state.gameId);
 		}
 	}
 
@@ -690,8 +878,25 @@ export function createGameManager(deps: GameManagerDeps) {
 
 		for (const state of activeGames) {
 			if (isDeadlinePassed(state, now)) {
-				console.log(`[tick] Deadline passed for #${state.gameId}, processing phase`);
-				await processPhase(state);
+				// Backoff: skip games that have failed too many times consecutively
+				const failures = gameFailureCount.get(state.gameId) ?? 0;
+				if (failures >= MAX_CONSECUTIVE_FAILURES) {
+					// Only retry every 10th tick (~10 min) after hitting the limit
+					const backoffTick = failures - MAX_CONSECUTIVE_FAILURES;
+					if (backoffTick % 10 !== 0) {
+						gameFailureCount.set(state.gameId, failures + 1);
+						continue;
+					}
+				}
+
+				try {
+					console.log(`[tick] Deadline passed for #${state.gameId}, processing phase`);
+					await processPhase(state);
+				} catch (error) {
+					const newCount = (gameFailureCount.get(state.gameId) ?? 0) + 1;
+					gameFailureCount.set(state.gameId, newCount);
+					console.error(`[tick] Error processing #${state.gameId} (failure ${newCount}):`, error);
+				}
 			}
 		}
 	}
@@ -752,6 +957,39 @@ function formatStandings(state: GameState, centers: Record<string, string[]>): s
 			return `${power} (${handle}): ${c.length}`;
 		})
 		.join('\n');
+}
+
+/** Compare before/after center maps and generate commentary for notable changes */
+function buildCenterChangeLines(
+	before: Record<string, string[]>,
+	after: Record<string, string[]>,
+): string[] {
+	const lines: string[] = [];
+	for (const [power, newCenters] of Object.entries(after)) {
+		const oldCenters = before[power] ?? [];
+		const gained = newCenters.filter((c) => !oldCenters.includes(c));
+		const lost = oldCenters.filter((c) => !newCenters.includes(c));
+		const line = centerChangeCommentary(
+			power as import('@yourstaunchally/shared').Power,
+			gained,
+			lost,
+		);
+		if (line) lines.push(line);
+	}
+	return lines;
+}
+
+/** Generate near-victory warnings for any power approaching 18 centers */
+function buildNearVictoryWarnings(centers: Record<string, string[]>): string[] {
+	const lines: string[] = [];
+	for (const [power, powerCenters] of Object.entries(centers)) {
+		const warning = nearVictoryCommentary(
+			power as import('@yourstaunchally/shared').Power,
+			powerCenters.length,
+		);
+		if (warning) lines.push(warning);
+	}
+	return lines;
 }
 
 function formatRelativeDeadline(isoDeadline: string): string {

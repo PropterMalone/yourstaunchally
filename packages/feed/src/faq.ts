@@ -43,7 +43,7 @@ export const FAQ_HTML = `<!DOCTYPE html>
 <h2>How a Game Works</h2>
 <p>Diplomacy is a negotiation game set in pre-WWI Europe. Seven great powers compete for control of the continent. There are no dice — success depends entirely on negotiation and coordination with other players.</p>
 <ul>
-  <li><strong>Negotiate</strong> — Talk publicly in Bluesky threads. Make alliances, coordinate attacks, or bluff.</li>
+  <li><strong>Negotiate</strong> — Talk in the game thread, in DMs, wherever you want. Public negotiation is encouraged but not required.</li>
   <li><strong>Order</strong> — Each turn, privately DM your orders to the bot. All orders are revealed simultaneously.</li>
   <li><strong>Adjudicate</strong> — The bot resolves all moves at once. Supports beat single units; conflicts without support bounce.</li>
   <li><strong>Win</strong> — Control 18 of the 34 supply centers for a solo victory, or all remaining players can vote for a draw.</li>
@@ -106,6 +106,7 @@ export const FAQ_HTML = `<!DOCTYPE html>
 <ul>
   <li><strong>Follow the bot</strong> — You must follow @yourstaunchally.bsky.social or it can't DM you roles and results.</li>
   <li><strong>Orders are private</strong> — Only you can see your submitted orders until adjudication.</li>
+  <li><strong>Communication is unregulated</strong> — Negotiate however you want: game threads, Bluesky DMs, Discord, group chats, carrier pigeon. The bot cannot and will not police how players talk to each other. Public negotiation in threads is encouraged because it makes the game more fun to follow, but private channels are completely fair game.</li>
   <li><strong>Civil disorder</strong> — Unassigned powers (in games with fewer than 7 players) hold all units and never build.</li>
   <li><strong>Multiple games</strong> — You can play in several games at once. Use the game ID to keep them straight.</li>
   <li><strong>Game feeds</strong> — Each game gets its own Bluesky feed with all announcements and results.</li>
@@ -121,7 +122,7 @@ export const FAQ_HTML = `<!DOCTYPE html>
 </ul>
 
 <footer>
-  <p>YourStaunchAlly is open source: <a href="https://github.com/PropterMalone/yourfriend">github.com/PropterMalone/yourfriend</a></p>
+  <p>YourStaunchAlly is open source: <a href="https://github.com/PropterMalone/yourstaunchally">github.com/PropterMalone/yourstaunchally</a></p>
   <p>Run by <a href="https://bsky.app/profile/proptermalone.bsky.social">@proptermalone.bsky.social</a></p>
 </footer>
 

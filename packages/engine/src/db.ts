@@ -30,11 +30,15 @@ export interface GameDb {
 	/** Record a game post for the feed generator */
 	recordGamePost(
 		uri: string,
+		cid: string,
 		gameId: string,
 		authorDid: string,
 		kind: string,
 		phase: string | null,
 	): void;
+
+	/** Get the most recent post for a game (for quote-threading) */
+	getLatestGamePost(gameId: string): { uri: string; cid: string } | null;
 
 	/** Close the database */
 	close(): void;
@@ -74,6 +78,12 @@ export function createDb(config: DbConfig): GameDb {
 
 				CREATE INDEX IF NOT EXISTS idx_game_posts_game_id ON game_posts(game_id, indexed_at);
 			`);
+
+			// Migration: add cid column to game_posts (nullable for existing rows)
+			const cols = db.pragma('table_info(game_posts)') as { name: string }[];
+			if (!cols.some((c) => c.name === 'cid')) {
+				db.exec("ALTER TABLE game_posts ADD COLUMN cid TEXT NOT NULL DEFAULT ''");
+			}
 		},
 
 		saveGame(state: GameState) {
@@ -131,15 +141,25 @@ export function createDb(config: DbConfig): GameDb {
 
 		recordGamePost(
 			uri: string,
+			cid: string,
 			gameId: string,
 			authorDid: string,
 			kind: string,
 			phase: string | null,
 		) {
 			db.prepare(`
-				INSERT OR IGNORE INTO game_posts (uri, game_id, author_did, kind, phase, indexed_at)
-				VALUES (?, ?, ?, ?, ?, ?)
-			`).run(uri, gameId, authorDid, kind, phase, Date.now());
+				INSERT OR IGNORE INTO game_posts (uri, cid, game_id, author_did, kind, phase, indexed_at)
+				VALUES (?, ?, ?, ?, ?, ?, ?)
+			`).run(uri, cid, gameId, authorDid, kind, phase, Date.now());
+		},
+
+		getLatestGamePost(gameId: string): { uri: string; cid: string } | null {
+			const row = db
+				.prepare(
+					"SELECT uri, cid FROM game_posts WHERE game_id = ? AND cid != '' ORDER BY indexed_at DESC LIMIT 1",
+				)
+				.get(gameId) as { uri: string; cid: string } | undefined;
+			return row ?? null;
 		},
 
 		close() {

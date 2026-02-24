@@ -7,6 +7,12 @@ import { AtpAgent, RichText } from '@atproto/api';
 
 const BLUESKY_MAX_GRAPHEMES = 300;
 
+/** Count graphemes using Intl.Segmenter (handles emoji/multi-byte correctly) */
+export function graphemeLength(text: string): number {
+	const segmenter = new Intl.Segmenter('en', { granularity: 'grapheme' });
+	return [...segmenter.segment(text)].length;
+}
+
 /** Truncate text to Bluesky's 300-grapheme limit. Uses Intl.Segmenter for correct grapheme counting. */
 export function truncateToLimit(text: string, limit = BLUESKY_MAX_GRAPHEMES): string {
 	const segmenter = new Intl.Segmenter('en', { granularity: 'grapheme' });
@@ -16,6 +22,59 @@ export function truncateToLimit(text: string, limit = BLUESKY_MAX_GRAPHEMES): st
 		.slice(0, limit - 1)
 		.map((s) => s.segment)
 		.join('')}…`;
+}
+
+/**
+ * Split long text into multiple ≤300-grapheme posts.
+ * Splits at paragraph breaks (\n\n), then line breaks (\n), then spaces.
+ * Adds [n/total] suffix to each chunk when splitting occurs.
+ */
+export function splitIntoPosts(text: string, limit = BLUESKY_MAX_GRAPHEMES): string[] {
+	if (graphemeLength(text) <= limit) return [text];
+
+	// Split into lines, preserving empty lines as paragraph markers
+	const lines = text.split('\n');
+	const chunks: string[] = [];
+	let current = '';
+
+	for (const line of lines) {
+		const candidate = current ? `${current}\n${line}` : line;
+		if (graphemeLength(candidate) <= limit) {
+			current = candidate;
+		} else if (!current) {
+			// Single line exceeds limit — split on spaces
+			const words = line.split(' ');
+			let wordChunk = '';
+			for (const word of words) {
+				const wordCandidate = wordChunk ? `${wordChunk} ${word}` : word;
+				if (graphemeLength(wordCandidate) <= limit) {
+					wordChunk = wordCandidate;
+				} else {
+					if (wordChunk) chunks.push(wordChunk);
+					wordChunk = word;
+				}
+			}
+			current = wordChunk;
+		} else {
+			chunks.push(current);
+			current = line;
+		}
+	}
+	if (current) chunks.push(current);
+
+	// Add [n/total] suffix if we split
+	if (chunks.length > 1) {
+		const total = chunks.length;
+		return chunks.map((chunk, i) => {
+			const suffix = ` [${i + 1}/${total}]`;
+			// If adding suffix would exceed limit, trim the chunk
+			if (graphemeLength(chunk + suffix) > limit) {
+				return truncateToLimit(chunk, limit - graphemeLength(suffix)) + suffix;
+			}
+			return chunk + suffix;
+		});
+	}
+	return chunks;
 }
 
 export interface BotConfig {
@@ -94,33 +153,113 @@ export async function replyToPost(
 }
 
 /**
+ * Post a (potentially long) message as a thread.
+ * Splits text into multiple posts if it exceeds 300 graphemes.
+ * Returns the first post's uri/cid (for threading/recording).
+ */
+export async function postThread(
+	agent: AtpAgent,
+	text: string,
+	labels?: string[],
+): Promise<{ uri: string; cid: string }> {
+	const chunks = splitIntoPosts(text);
+	const first = await postMessage(agent, chunks[0] as string, labels);
+	let parent = first;
+	for (let i = 1; i < chunks.length; i++) {
+		parent = await replyToPost(
+			agent,
+			chunks[i] as string,
+			parent.uri,
+			parent.cid,
+			first.uri,
+			first.cid,
+		);
+	}
+	return first;
+}
+
+/**
+ * Reply with a (potentially long) message as a thread.
+ * Splits text into multiple posts if it exceeds 300 graphemes.
+ * Returns the first reply's uri/cid.
+ */
+export async function replyThread(
+	agent: AtpAgent,
+	text: string,
+	parentUri: string,
+	parentCid: string,
+	rootUri: string,
+	rootCid: string,
+	labels?: string[],
+): Promise<{ uri: string; cid: string }> {
+	const chunks = splitIntoPosts(text);
+	const first = await replyToPost(
+		agent,
+		chunks[0] as string,
+		parentUri,
+		parentCid,
+		rootUri,
+		rootCid,
+		labels,
+	);
+	let parent = first;
+	for (let i = 1; i < chunks.length; i++) {
+		parent = await replyToPost(
+			agent,
+			chunks[i] as string,
+			parent.uri,
+			parent.cid,
+			rootUri,
+			rootCid,
+		);
+	}
+	return first;
+}
+
+/**
  * Poll for new notifications (mentions).
- * Returns unread notifications since the given cursor.
+ * Always starts from page 1 and paginates forward until hitting read
+ * notifications or running out of pages. Does NOT use a persistent cursor —
+ * Bluesky's listNotifications cursor is for pagination, not "since this point".
+ * Relies on updateSeenNotifications + isRead to avoid reprocessing.
  */
 export async function pollMentions(
 	agent: AtpAgent,
-	cursor?: string,
-): Promise<{ notifications: MentionNotification[]; cursor: string | undefined }> {
-	const response = await agent.listNotifications({ cursor, limit: 50 });
-	const mentions = response.data.notifications
-		.filter((n) => (n.reason === 'mention' || n.reason === 'reply') && !n.isRead)
-		.map((n) => ({
-			uri: n.uri,
-			cid: n.cid,
-			authorDid: n.author.did,
-			authorHandle: n.author.handle,
-			text: (n.record as { text?: string }).text ?? '',
-			indexedAt: n.indexedAt,
-		}));
+): Promise<{ notifications: MentionNotification[] }> {
+	const allMentions: MentionNotification[] = [];
+	let pageCursor: string | undefined;
+	const MAX_PAGES = 5;
 
-	if (mentions.length > 0) {
+	for (let page = 0; page < MAX_PAGES; page++) {
+		const response = await agent.listNotifications({ cursor: pageCursor, limit: 50 });
+		const notifs = response.data.notifications;
+		if (notifs.length === 0) break;
+
+		const mentions = notifs
+			.filter((n) => (n.reason === 'mention' || n.reason === 'reply') && !n.isRead)
+			.map((n) => ({
+				uri: n.uri,
+				cid: n.cid,
+				authorDid: n.author.did,
+				authorHandle: n.author.handle,
+				text: (n.record as { text?: string }).text ?? '',
+				indexedAt: n.indexedAt,
+			}));
+
+		allMentions.push(...mentions);
+
+		// If any notification on this page was already read, we've caught up
+		if (notifs.some((n) => n.isRead)) break;
+
+		pageCursor = response.data.cursor;
+		if (!pageCursor) break;
+	}
+
+	if (allMentions.length > 0) {
 		await agent.updateSeenNotifications();
 	}
 
-	return {
-		notifications: mentions,
-		cursor: response.data.cursor,
-	};
+	return { notifications: allMentions };
 }
 
 export interface MentionNotification {
