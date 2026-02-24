@@ -9,6 +9,7 @@
  *   @yourstaunchally status #abc123  → game status
  *   @yourstaunchally draw #abc123    → vote for a draw
  *   @yourstaunchally abandon #abc123 → abandon a game (creator only)
+ *   @yourstaunchally claim #abc123 FRANCE → claim a power in an active game
  *   @yourstaunchally help            → show help text
  *
  * DM commands (private orders):
@@ -25,6 +26,7 @@ export type MentionCommand =
 	| { type: 'status'; gameId: string }
 	| { type: 'draw'; gameId: string }
 	| { type: 'abandon'; gameId: string }
+	| { type: 'claim'; gameId: string; power: string }
 	| { type: 'help' }
 	| { type: 'unknown'; text: string };
 
@@ -79,6 +81,14 @@ export function parseMention(text: string): MentionCommand {
 	}
 	if (cleaned.startsWith('abandon') || cleaned.startsWith('cancel')) {
 		return { type: 'abandon', gameId };
+	}
+	if (cleaned.startsWith('claim')) {
+		// Extract power name from text (case-insensitive): "claim #abc FRANCE"
+		const powerMatch = text.match(/claim\s+#\w+\s+(\w+)/i);
+		if (powerMatch?.[1]) {
+			return { type: 'claim', gameId, power: powerMatch[1].toUpperCase() };
+		}
+		return { type: 'unknown', text };
 	}
 
 	return { type: 'unknown', text };

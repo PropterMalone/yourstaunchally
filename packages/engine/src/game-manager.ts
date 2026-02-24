@@ -12,6 +12,7 @@ import {
 	advancePhase,
 	allOrdersSubmitted,
 	checkSoloVictory,
+	claimPower,
 	createGame,
 	finishGameSoloVictory,
 	formatCenterCounts,
@@ -94,6 +95,9 @@ export function createGameManager(deps: GameManagerDeps) {
 				break;
 			case 'abandon':
 				await handleAbandon(command, notification, reply);
+				break;
+			case 'claim':
+				await handleClaim(command, notification, reply);
 				break;
 			case 'help':
 				await reply(HELP_TEXT);
@@ -216,13 +220,16 @@ export function createGameManager(deps: GameManagerDeps) {
 
 		db.saveGame(started);
 
-		// DM each player their power assignment (non-fatal — DMs may fail if player doesn't follow bot)
+		// DM each player their power assignment with actual units (non-fatal)
 		for (const player of started.players) {
 			if (player.power) {
+				const units = adjResult.units[player.power] ?? [];
+				const unitList = units.join(', ');
+				const exampleOrder = units[0] ? `${units[0]} H` : 'A PAR H';
 				try {
 					await dmSender.sendDm(
 						player.did,
-						`Game #${started.gameId} has started! You are ${player.power}.\n\nSubmit orders via DM: #${started.gameId} A PAR - BUR; A MAR - SPA\n\nDeadline: ${started.phaseDeadline}`,
+						`Game #${started.gameId} has started! You are ${player.power}.\n\nYour units: ${unitList}\n\nSubmit orders via DM:\n#${started.gameId} ${exampleOrder}; ...\n\nSeparate orders with semicolons. DM "#${started.gameId} possible" to see all options.\n\nDeadline: ${started.phaseDeadline}`,
 					);
 				} catch (error) {
 					console.warn(`[dm] Failed to DM ${player.handle}: ${error}`);
@@ -340,6 +347,47 @@ export function createGameManager(deps: GameManagerDeps) {
 		await postMessage(agent, `❌ Game #${command.gameId} has been abandoned.`);
 	}
 
+	async function handleClaim(
+		command: MentionCommand & { type: 'claim' },
+		notification: MentionNotification,
+		reply: (text: string) => Promise<void>,
+	): Promise<void> {
+		const state = db.loadGame(command.gameId);
+		if (!state) {
+			await reply(`Game #${command.gameId} not found.`);
+			return;
+		}
+
+		const power = command.power as import('@yourstaunchally/shared').Power;
+		const result = claimPower(state, notification.authorDid, notification.authorHandle, power);
+		if (!result.ok) {
+			await reply(result.error);
+			return;
+		}
+
+		db.saveGame(result.state);
+		await reply(
+			`@${notification.authorHandle} claims ${power} in #${command.gameId}! No longer in civil disorder.`,
+		);
+
+		// DM the new player with their units and instructions
+		if (state.diplomacyState) {
+			try {
+				const { getPossibleOrders } = await import('./adjudicator.js');
+				const possible = await getPossibleOrders(state.diplomacyState);
+				const powerOrders = possible.possibleOrders[power];
+				const unitLocs = powerOrders ? Object.keys(powerOrders) : [];
+				const unitList = unitLocs.length > 0 ? unitLocs.join(', ') : 'No units this phase';
+				await dmSender.sendDm(
+					notification.authorDid,
+					`Welcome to game #${command.gameId}! You are ${power}.\n\nOrderable locations: ${unitList}\n\nDM "#${command.gameId} possible" to see all options.\nDeadline: ${state.phaseDeadline}`,
+				);
+			} catch (error) {
+				console.warn(`[dm] Failed to DM ${notification.authorHandle}: ${error}`);
+			}
+		}
+	}
+
 	async function handleDm(dm: InboundDm): Promise<void> {
 		const command = parseDm(dm.text);
 
@@ -390,7 +438,7 @@ export function createGameManager(deps: GameManagerDeps) {
 		const orderSummary = orders.join('\n');
 		await dmSender.sendDm(
 			dm.senderDid,
-			`Orders received for ${power} in #${command.gameId}:\n${orderSummary}`,
+			`✓ Orders for ${power} in #${command.gameId} (${orders.length} order${orders.length === 1 ? '' : 's'}):\n${orderSummary}\n\nSend new orders to replace these. DM "#${command.gameId} possible" to see all options.`,
 		);
 
 		// Check if all orders are now in
@@ -458,13 +506,18 @@ export function createGameManager(deps: GameManagerDeps) {
 
 		const lines: string[] = [];
 		for (const [loc, orders] of Object.entries(powerOrders)) {
-			lines.push(`${loc}: ${orders.slice(0, 5).join(', ')}${orders.length > 5 ? '...' : ''}`);
+			lines.push(
+				`${loc} (${orders.length} options): ${orders.slice(0, 4).join(', ')}${orders.length > 4 ? ` (+${orders.length - 4} more)` : ''}`,
+			);
 		}
 
-		await dmSender.sendDm(
-			dm.senderDid,
-			`Possible orders for ${power} (${state.currentPhase}):\n${lines.join('\n')}`,
-		);
+		// Bluesky DM limit is ~1000 chars — truncate if needed
+		let msg = `${power} (${state.currentPhase}) — ${Object.keys(powerOrders).length} units:\n\n${lines.join('\n')}`;
+		if (msg.length > 950) {
+			msg = `${msg.slice(0, 947)}...`;
+		}
+
+		await dmSender.sendDm(dm.senderDid, msg);
 	}
 
 	/** Process the current phase — adjudicate, update state, post results */
@@ -537,13 +590,15 @@ export function createGameManager(deps: GameManagerDeps) {
 			await postMessage(agent, phaseMsg);
 		}
 
-		// Notify players about the new phase (non-fatal)
+		// Notify players about the new phase with their current units (non-fatal)
 		for (const player of advanced.players) {
 			if (player.power) {
+				const units = adjResult.units[player.power] ?? [];
+				const unitList = units.length > 0 ? `Your units: ${units.join(', ')}` : 'No units';
 				try {
 					await dmSender.sendDm(
 						player.did,
-						`New phase: ${adjResult.phase} in #${state.gameId}. Submit your orders!\nDeadline: ${advanced.phaseDeadline}`,
+						`New phase: ${adjResult.phase} in #${state.gameId}\n\n${unitList}\n\nSubmit orders: #${state.gameId} ...\nDeadline: ${advanced.phaseDeadline}`,
 					);
 				} catch (error) {
 					console.warn(`[dm] Failed to DM ${player.handle}: ${error}`);
@@ -573,20 +628,21 @@ export function createGameManager(deps: GameManagerDeps) {
 	};
 }
 
-const HELP_TEXT = `🎲 YourStaunchAlly — Diplomacy Bot
+const HELP_TEXT = `YourStaunchAlly — Diplomacy on Bluesky
 
-Commands:
-• new game — Start a new game
-• join #id — Join a game
-• leave #id — Leave (lobby only)
-• start #id — Start with current players
-• status #id — Check game status
-• draw #id — Vote for a draw
+Mention commands:
+• new game — Create a game
+• join #id — Join
+• start #id — Start (2-7 players)
+• status #id — Check phase/orders
+• draw #id — Vote for draw
 • abandon #id — Cancel (creator only)
 
-Orders via DM:
-#id A PAR - BUR; A MAR - SPA; F BRE - MAO
+DM to submit orders:
+#id A PAR - BUR; F BRE - MAO; A MAR S A PAR - BUR
 
-Query via DM:
-#id orders — Show your submitted orders
-#id possible — Show available orders`;
+DM queries:
+#id possible — See your options
+#id orders — See submitted orders
+
+H=hold, -=move, S=support, C=convoy`;
