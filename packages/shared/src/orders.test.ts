@@ -68,6 +68,20 @@ describe('parseOrder', () => {
 		});
 	});
 
+	it('parses support hold with explicit H', () => {
+		const result = parseOrder('A UKR S F RUM H');
+		expect(result).toEqual({
+			ok: true,
+			order: {
+				raw: 'A UKR S F RUM H',
+				type: 'support',
+				unitType: 'A',
+				province: 'UKR',
+				supportedUnit: { type: 'F', province: 'RUM' },
+			},
+		});
+	});
+
 	it('parses support move', () => {
 		const result = parseOrder('A MAR S A PAR - BUR');
 		expect(result).toEqual({
@@ -223,6 +237,10 @@ describe('normalizeOrderString', () => {
 
 	it('normalizes "(via convoy)" to VIA', () => {
 		expect(normalizeOrderString('A YOR - DEN (via convoy)')).toBe('A YOR - DEN VIA');
+	});
+
+	it('strips trailing H from support-hold orders', () => {
+		expect(normalizeOrderString('A UKR S F RUM H')).toBe('A UKR S F RUM');
 	});
 });
 
