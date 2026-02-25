@@ -100,7 +100,7 @@ export const FAQ_HTML = `<!DOCTYPE html>
   <tr><td>Support hold</td><td><code>UNIT S UNIT</code></td><td><code>F GOL S A MAR</code></td></tr>
   <tr><td>Convoy</td><td><code>F SEA C A FROM - TO</code></td><td><code>F MAO C A BRE - SPA</code></td></tr>
 </table>
-<p>Separate multiple orders with semicolons. Prefix every order with the game ID.</p>
+<p>Separate multiple orders with semicolons, commas, or newlines. Prefix every order with the game ID.</p>
 
 <h2>Important Notes</h2>
 <ul>

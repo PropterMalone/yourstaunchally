@@ -57,11 +57,11 @@ npm run build       # tsc -b across all packages
 
 ## Game Flow
 
-1. `@yourstaunchally new game` → creates lobby, creator auto-joins
+1. `@yrstaunchally new game` → creates lobby, creator auto-joins
 2. Players `join #id` → auto-starts at 7, or `start #id` with 3-6
 3. Powers assigned randomly, unassigned enter civil disorder
-4. Orders via DM: `#id A PAR - BUR; A MAR - SPA; F BRE - MAO`
-5. Phase deadline (48h movement, 24h retreat) or all orders in → adjudicate
+4. Orders via DM: `#id A PAR - BUR, A MAR - SPA, F BRE - MAO` (semicolons, commas, or newlines)
+5. Phase deadline (48h movement, 24h retreat) or all orders in → adjudicate (20-min grace period)
 6. Win: 18 supply centers (solo) or unanimous draw vote
 
 ## Key Design Decisions
@@ -80,6 +80,12 @@ BSKY_PASSWORD=      # Bot's app password
 LIVE_DMS=1          # Enable real Bluesky DMs (default: console)
 DB_PATH=            # SQLite path (default: /data/yourstaunchally.db)
 PYTHON_PATH=        # Python executable (default: python3)
+FEED_HOSTNAME=      # Hostname for feed generator
+FEED_PUBLISHER_DID= # did:web for feed service
+FEED_BOT_DID=       # Bot's did:plc for feed record URIs
+LABELER_URL=        # propter-labeler HTTP API (e.g. http://labeler:4100)
+LABELER_SECRET=     # Shared secret for labeler API
+OLLAMA_URL=         # Ollama endpoint for LLM personas (optional)
 ```
 
 ## Gotchas
@@ -88,3 +94,5 @@ PYTHON_PATH=        # Python executable (default: python3)
 - Biome's `noNonNullAssertion` conflicts with TypeScript's `noUncheckedIndexedAccess` — use `as T` casts or helper functions instead of `!`
 - `.venv/` and `scripts/` excluded from biome in `biome.json`
 - `import.meta.dirname` used in adjudicator.ts to locate Python script
+- Python diplomacy lib prints warnings to stdout (e.g. "UNORDERABLE UNIT") — adjudicator.ts strips pre-JSON noise
+- Labeler: shared propter-labeler service on propter-net Docker network (see ~/Projects/propter-labeler)
