@@ -220,6 +220,10 @@ describe('normalizeOrderString', () => {
 	it('does not modify fleet orders with explicit coast', () => {
 		expect(normalizeOrderString('F MAO - SPA/NC')).toBe('F MAO - SPA/NC');
 	});
+
+	it('normalizes "(via convoy)" to VIA', () => {
+		expect(normalizeOrderString('A YOR - DEN (via convoy)')).toBe('A YOR - DEN VIA');
+	});
 });
 
 describe('inferCoast', () => {
