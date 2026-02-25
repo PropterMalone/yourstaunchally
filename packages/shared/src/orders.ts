@@ -196,6 +196,8 @@ export function normalizeOrderString(order: string): string {
 		.trim()
 		.toUpperCase()
 		.replace(/\s+/g, ' ')
+		// Strip accidental leading game ID: "#UETPUE A PAR H" → "A PAR H"
+		.replace(/^#[A-Z0-9]{4,8}\s+/, '')
 		.replace(/\s*-\s*/g, ' - ')
 		.replace(/\(VIA CONVOY\)/, 'VIA')
 		// Strip trailing H from support-hold: "A MAR S A PAR H" → "A MAR S A PAR"

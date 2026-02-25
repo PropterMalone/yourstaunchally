@@ -242,6 +242,10 @@ describe('normalizeOrderString', () => {
 	it('strips trailing H from support-hold orders', () => {
 		expect(normalizeOrderString('A UKR S F RUM H')).toBe('A UKR S F RUM');
 	});
+
+	it('strips accidental leading game ID', () => {
+		expect(normalizeOrderString('#uetpue A WAR H')).toBe('A WAR H');
+	});
 });
 
 describe('inferCoast', () => {
