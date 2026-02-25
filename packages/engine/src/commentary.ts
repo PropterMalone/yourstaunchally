@@ -468,8 +468,17 @@ export function illegalOrderCommentary(illegalCount: number, totalCount: number)
 	return `⚠️ ${illegalCount} of ${totalCount} orders are not legal. ${pick(ILLEGAL_ORDER_FLAVOR)} DM "#id possible" to check.`;
 }
 
+/** Bicoastal provinces that require explicit coast for fleet moves */
+const BICOASTAL = ['SPA', 'BUL', 'STP'];
+
 /** Per-order annotation for illegal orders */
 export function illegalOrderAnnotation(order: string): string {
+	// Detect fleet move to bicoastal province without coast
+	const coastMatch = order.match(/^F [A-Z]{3}(?:\/[NSEW]C)? - ([A-Z]{3})$/);
+	if (coastMatch && BICOASTAL.includes(coastMatch[1] ?? '')) {
+		const dest = coastMatch[1];
+		return `  ❌ ${order} — needs a coast (e.g. ${dest}/NC or ${dest}/SC)`;
+	}
 	return `  ❌ ${order} — not a legal order`;
 }
 
