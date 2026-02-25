@@ -17,7 +17,8 @@ import type { Order, UnitType } from './types.js';
 /** Full order regex patterns */
 const HOLD_RE = /^([AF]) ([A-Z]{3}(?:\/[NSEW]C)?) H$/;
 const MOVE_RE = /^([AF]) ([A-Z]{3}(?:\/[NSEW]C)?) - ([A-Z]{3}(?:\/[NSEW]C)?)(?:\s+VIA)?$/;
-const SUPPORT_HOLD_RE = /^([AF]) ([A-Z]{3}(?:\/[NSEW]C)?) S ([AF]) ([A-Z]{3}(?:\/[NSEW]C)?)$/;
+const SUPPORT_HOLD_RE =
+	/^([AF]) ([A-Z]{3}(?:\/[NSEW]C)?) S ([AF]) ([A-Z]{3}(?:\/[NSEW]C)?)(?: H)?$/;
 const SUPPORT_MOVE_RE =
 	/^([AF]) ([A-Z]{3}(?:\/[NSEW]C)?) S ([AF]) ([A-Z]{3}(?:\/[NSEW]C)?) - ([A-Z]{3}(?:\/[NSEW]C)?)$/;
 const CONVOY_RE =
@@ -196,7 +197,9 @@ export function normalizeOrderString(order: string): string {
 		.toUpperCase()
 		.replace(/\s+/g, ' ')
 		.replace(/\s*-\s*/g, ' - ')
-		.replace(/\(VIA CONVOY\)/, 'VIA');
+		.replace(/\(VIA CONVOY\)/, 'VIA')
+		// Strip trailing H from support-hold: "A MAR S A PAR H" → "A MAR S A PAR"
+		.replace(/^([AF] [A-Z]{3}(?:\/[NSEW]C)? S [AF] [A-Z]{3}(?:\/[NSEW]C)?) H$/, '$1');
 
 	// Auto-infer coast for fleet moves: "F MAO - SPA" → "F MAO - SPA/NC" (if unambiguous)
 	const moveMatch = normalized.match(/^F ([A-Z]{3}(?:\/[NSEW]C)?) - ([A-Z]{3})$/);
