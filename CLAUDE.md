@@ -57,7 +57,7 @@ npm run build       # tsc -b across all packages
 
 ## Game Flow
 
-1. `@yrstaunchally new game` → creates lobby, creator auto-joins
+1. `@yourstalwartally new game` → creates lobby, creator auto-joins
 2. Players `join #id` → auto-starts at 7, or `start #id` with 3-6
 3. Powers assigned randomly, unassigned enter civil disorder
 4. Orders via DM: `#id A PAR - BUR, A MAR - SPA, F BRE - MAO` (semicolons, commas, or newlines)

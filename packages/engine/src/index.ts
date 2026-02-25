@@ -220,7 +220,7 @@ async function main() {
 						const oldDmSender = createBlueskyDmSender(oldChatAgent);
 						await oldDmSender.sendDm(
 							dm.senderDid,
-							'Hey! I moved to a new account: @yrstaunchally.bsky.social\n\nI processed your message this time, but please follow and DM the new account going forward.',
+							'Hey! I moved to a new account: @yourstalwartally.bsky.social\n\nI processed your message this time, but please follow and DM the new account going forward.',
 						);
 					} catch (error) {
 						console.error('[old-dm] Error handling forwarded DM:', error);
