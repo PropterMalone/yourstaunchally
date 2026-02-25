@@ -71,6 +71,14 @@ npm run build       # tsc -b across all packages
 - **Civil disorder** — Unassigned/missing powers hold all units, never build.
 - **48h/24h phases** — Async-friendly for cross-timezone play.
 - **GameState as JSON blob** — Serialized to SQLite, same pattern as Skeetwolf.
+- **Partial order updates** — `submitOrders()` merges by unit location (first two tokens). Players update specific units without resubmitting everything.
+- **Coast auto-inference** — `normalizeOrderString()` auto-appends coast for unambiguous fleet moves to SPA/BUL/STP. Ambiguous cases (MAO→SPA, POR→SPA, CON→BUL) left for the player.
+
+## Rate Limiting (Anti-Spam)
+
+- **Posts**: Sliding window — max 5 posts per 60s (bot.ts)
+- **DMs**: 2s minimum between sends (dm.ts)
+- **Status updates**: 3 checkpoints only — 24h, 6h, 1h before deadline. No @-mentions in status posts.
 
 ## Environment Variables
 

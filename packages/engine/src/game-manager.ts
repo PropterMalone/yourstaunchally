@@ -1131,12 +1131,14 @@ Mention commands:
 
 DM to submit orders:
 #id A PAR - BUR; F BRE - MAO; A MAR S A PAR - BUR
+(Send specific units to update — existing orders are kept)
 
 DM queries:
 #id possible — See your options
 #id orders — See submitted orders
 
-H=hold, -=move, S=support, C=convoy`;
+H=hold, -=move, S=support, C=convoy
+Fleet coasts auto-inferred when unambiguous`;
 
 function formatStandings(state: GameState, centers: Record<string, string[]>): string {
 	return Object.entries(centers)
