@@ -52,7 +52,15 @@ async function callAdjudicator(request: Record<string, unknown>): Promise<Record
 			}
 
 			try {
-				const response = JSON.parse(stdout) as AdjudicatorResponse;
+				// The Python diplomacy lib may print warnings to stdout before our JSON.
+				// Strip everything before the first '{' to get clean JSON.
+				const jsonStart = stdout.indexOf('{');
+				const jsonStr = jsonStart > 0 ? stdout.slice(jsonStart) : stdout;
+				if (jsonStart > 0) {
+					console.warn('[adjudicator stdout noise]', stdout.slice(0, jsonStart).trim());
+				}
+
+				const response = JSON.parse(jsonStr) as AdjudicatorResponse;
 				if (!response.ok) {
 					reject(new Error(`Adjudicator error: ${response.error ?? 'unknown'}`));
 					return;

@@ -17,6 +17,7 @@ import {
 	pollInboundDms,
 } from './dm.js';
 import { createGameManager } from './game-manager.js';
+import { createLabelerClient } from './labeler-client.js';
 import { createLlmClient } from './llm.js';
 
 const POLL_INTERVAL_MS = 15_000; // 15 seconds
@@ -85,7 +86,20 @@ async function main() {
 		);
 	}
 
-	const manager = createGameManager({ agent, dmSender, db, llm: llm ?? undefined });
+	// Labeler for game post filtering (optional — degrades gracefully)
+	const labelerUrl = process.env['LABELER_URL'];
+	const labelerSecret = process.env['LABELER_SECRET'];
+	const labeler =
+		labelerUrl && labelerSecret ? createLabelerClient(labelerUrl, labelerSecret) : undefined;
+	if (labeler) console.log(`[init] Labeler: ${labelerUrl}`);
+
+	const manager = createGameManager({
+		agent,
+		dmSender,
+		db,
+		llm: llm ?? undefined,
+		labeler,
+	});
 
 	// DM cursor persisted to DB (TID-based, lexicographic order)
 	let dmCursor = db.getBotState('dm_cursor') ?? undefined;

@@ -46,6 +46,7 @@ import {
 } from './commentary.js';
 import type { GameDb } from './db.js';
 import type { DmSender, InboundDm } from './dm.js';
+import type { LabelerClient } from './labeler-client.js';
 import type { LlmClient } from './llm.js';
 import { postWithMapSvg } from './map-renderer.js';
 
@@ -61,6 +62,8 @@ export interface GameManagerDeps {
 	};
 	/** Optional LLM client for in-character DM responses */
 	llm?: LlmClient;
+	/** Optional labeler client for labeling game posts */
+	labeler?: LabelerClient;
 }
 
 export function createGameManager(deps: GameManagerDeps) {
@@ -68,6 +71,7 @@ export function createGameManager(deps: GameManagerDeps) {
 	const config = deps.config ?? DEFAULT_GAME_CONFIG;
 	const adj = deps.adjudicator ?? { newGame, setOrdersAndProcess };
 	const llm = deps.llm ?? null;
+	const labeler = deps.labeler ?? null;
 
 	const botDid = agent.session?.did ?? '';
 
@@ -76,6 +80,19 @@ export function createGameManager(deps: GameManagerDeps) {
 	const processedMentionUris = new Set<string>();
 	const DEDUP_SET_MAX = 1000;
 	const DEDUP_SET_EVICT = 500;
+
+	/** Record a game post + label it via external labeler (fire-and-forget) */
+	function recordAndLabel(
+		uri: string,
+		cid: string,
+		gameId: string,
+		authorDid: string,
+		kind: string,
+		phase: string | null,
+	) {
+		db.recordGamePost(uri, cid, gameId, authorDid, kind, phase);
+		labeler?.labelPost(uri, 'diplomacy');
+	}
 
 	/** Per-game lock — prevents double-adjudication from concurrent tick + order submission */
 	const processingGames = new Set<string>();
@@ -168,7 +185,8 @@ export function createGameManager(deps: GameManagerDeps) {
 		);
 		state = { ...state, announcementPost: announcement };
 		db.saveGame(state);
-		db.recordGamePost(announcement.uri, announcement.cid, gameId, botDid, 'announcement', null);
+		recordAndLabel(announcement.uri, announcement.cid, gameId, botDid, 'announcement', null);
+		labeler?.watchThread(announcement.uri, 'diplomacy');
 
 		await reply(`Game #${gameId} created! Waiting for players (1/${config.maxPlayers}).`);
 	}
@@ -304,7 +322,7 @@ export function createGameManager(deps: GameManagerDeps) {
 			console.warn(`[map] Failed to render start map: ${error}`);
 			startPost = await postThread(agent, startMsg);
 		}
-		db.recordGamePost(
+		recordAndLabel(
 			startPost.uri,
 			startPost.cid,
 			started.gameId,
@@ -413,7 +431,7 @@ export function createGameManager(deps: GameManagerDeps) {
 				agent,
 				`🤝 Game #${command.gameId} ends in a draw!${standings}`,
 			);
-			db.recordGamePost(
+			recordAndLabel(
 				drawPost.uri,
 				drawPost.cid,
 				command.gameId,
@@ -450,7 +468,7 @@ export function createGameManager(deps: GameManagerDeps) {
 		const abandoned = abandonGame(state);
 		db.saveGame(abandoned);
 		const abandonPost = await postMessage(agent, `❌ Game #${command.gameId} has been abandoned.`);
-		db.recordGamePost(
+		recordAndLabel(
 			abandonPost.uri,
 			abandonPost.cid,
 			command.gameId,
@@ -626,7 +644,7 @@ export function createGameManager(deps: GameManagerDeps) {
 				const gracePost = prev
 					? await postWithQuote(agent, graceMsg, prev.uri, prev.cid)
 					: await postThread(agent, graceMsg);
-				db.recordGamePost(
+				recordAndLabel(
 					gracePost.uri,
 					gracePost.cid,
 					command.gameId,
@@ -833,7 +851,7 @@ export function createGameManager(deps: GameManagerDeps) {
 					: prevPost
 						? await postWithQuote(agent, msg, prevPost.uri, prevPost.cid)
 						: await postThread(agent, msg);
-				db.recordGamePost(
+				recordAndLabel(
 					victoryPost.uri,
 					victoryPost.cid,
 					state.gameId,
@@ -885,14 +903,7 @@ export function createGameManager(deps: GameManagerDeps) {
 				: prevPost
 					? await postWithQuote(agent, phaseMsg, prevPost.uri, prevPost.cid)
 					: await postThread(agent, phaseMsg);
-			db.recordGamePost(
-				phasePost.uri,
-				phasePost.cid,
-				state.gameId,
-				botDid,
-				'phase',
-				adjResult.phase,
-			);
+			recordAndLabel(phasePost.uri, phasePost.cid, state.gameId, botDid, 'phase', adjResult.phase);
 
 			// Notify players about the new phase with their current units (non-fatal)
 			for (const player of advanced.players) {
@@ -958,7 +969,7 @@ export function createGameManager(deps: GameManagerDeps) {
 			const statusPost = prevPost
 				? await postWithQuote(agent, statusMsg, prevPost.uri, prevPost.cid)
 				: await postThread(agent, statusMsg);
-			db.recordGamePost(
+			recordAndLabel(
 				statusPost.uri,
 				statusPost.cid,
 				state.gameId,
