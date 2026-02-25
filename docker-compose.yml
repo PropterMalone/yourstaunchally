@@ -18,6 +18,9 @@ services:
       - ./data:/data
     depends_on:
       - ollama
+    networks:
+      - default
+      - propter-net
 
   feed:
     build: .
@@ -37,3 +40,8 @@ services:
 
 volumes:
   ollama-data:
+
+networks:
+  propter-net:
+    name: propter-net
+    external: true
