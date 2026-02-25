@@ -66,10 +66,21 @@ def set_orders_and_process(game, orders, render=False):
 
     game.process()
 
+    saved = to_saved_game_format(game)
     result = {
-        "game_state": to_saved_game_format(game),
+        "game_state": saved,
         **get_state(game),
     }
+
+    # Extract order results from the just-processed phase (last in history before current)
+    # saved['phases'] includes all completed phases; the most recently completed one is last
+    completed_phases = [p for p in saved.get("phases", []) if p["name"] != game.get_current_phase()]
+    if completed_phases:
+        last_phase = completed_phases[-1]
+        result["order_results"] = {
+            "orders": last_phase.get("orders", {}),
+            "results": last_phase.get("results", {}),
+        }
 
     if render:
         result["svg"] = game.render(incl_abbrev=True)

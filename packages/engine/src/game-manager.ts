@@ -29,7 +29,14 @@ import {
 } from '@yourstaunchally/shared';
 import { newGame, renderMap, setOrdersAndProcess } from './adjudicator.js';
 import type { MentionNotification } from './bot.js';
-import { postMessage, postThread, postWithQuote, replyThread } from './bot.js';
+import {
+	postMessage,
+	postThread,
+	postWithQuote,
+	replyThread,
+	replyToPost,
+	splitIntoPosts,
+} from './bot.js';
 import { type DmCommand, type MentionCommand, parseDm, parseMention } from './command-parser.js';
 import {
 	allOrdersInCommentary,
@@ -40,6 +47,7 @@ import {
 	illegalOrderCommentary,
 	legalOrderAnnotation,
 	nearVictoryCommentary,
+	orderReportCommentary,
 	phaseCommentary,
 	powerAssignmentCommentary,
 	soloVictoryCommentary,
@@ -792,6 +800,50 @@ export function createGameManager(deps: GameManagerDeps) {
 		}
 	}
 
+	/** Post submitted orders + outcomes as replies to the phase result post.
+	 *  One reply per power. Chains within a power if orders exceed 300 graphemes. */
+	async function postOrdersReply(
+		state: GameState,
+		orderResults: { orders: Record<string, string[]>; results: Record<string, string[]> },
+		rootPost: { uri: string; cid: string },
+	): Promise<void> {
+		let parent = rootPost;
+
+		for (const power of POWERS) {
+			const orders = orderResults.orders[power];
+			if (!orders || orders.length === 0) continue;
+
+			const player = state.players.find((p) => p.power === power);
+			const handle = player ? `@${player.handle}` : 'Civil Disorder';
+			const flavor = orderReportCommentary(power as import('@yourstaunchally/shared').Power);
+
+			const orderLines: string[] = [];
+			for (const order of orders) {
+				const parts = order.split(/\s+/);
+				const unitKey = `${parts[0]} ${parts[1]}`;
+				const results = orderResults.results[unitKey] ?? [];
+				const outcome = results.length > 0 ? ` [${results.join(', ')}]` : '';
+				orderLines.push(`  ${order}${outcome}`);
+			}
+
+			const text = `${power} (${handle})\n${flavor}\n\n${orderLines.join('\n')}`;
+			const chunks = splitIntoPosts(text);
+
+			for (const chunk of chunks) {
+				const reply = await replyToPost(
+					agent,
+					chunk,
+					parent.uri,
+					parent.cid,
+					rootPost.uri,
+					rootPost.cid,
+				);
+				recordAndLabel(reply.uri, reply.cid, state.gameId, botDid, 'orders', state.currentPhase);
+				parent = reply;
+			}
+		}
+	}
+
 	/** Process the current phase — adjudicate, update state, post results.
 	 *  Guarded by per-game lock to prevent double-adjudication from concurrent
 	 *  tick() deadline + handleOrderSubmission completing at the same moment. */
@@ -859,6 +911,15 @@ export function createGameManager(deps: GameManagerDeps) {
 					'game_over',
 					state.currentPhase,
 				);
+
+				// Reply with submitted orders on the final post too
+				if (adjResult.orderResults) {
+					try {
+						await postOrdersReply(state, adjResult.orderResults, victoryPost);
+					} catch (error) {
+						console.warn(`[phase] Failed to post orders reply for #${state.gameId}: ${error}`);
+					}
+				}
 				return;
 			}
 
@@ -904,6 +965,15 @@ export function createGameManager(deps: GameManagerDeps) {
 					? await postWithQuote(agent, phaseMsg, prevPost.uri, prevPost.cid)
 					: await postThread(agent, phaseMsg);
 			recordAndLabel(phasePost.uri, phasePost.cid, state.gameId, botDid, 'phase', adjResult.phase);
+
+			// Reply with the submitted orders so everyone can see what happened
+			if (adjResult.orderResults) {
+				try {
+					await postOrdersReply(state, adjResult.orderResults, phasePost);
+				} catch (error) {
+					console.warn(`[phase] Failed to post orders reply for #${state.gameId}: ${error}`);
+				}
+			}
 
 			// Notify players about the new phase with their current units (non-fatal)
 			for (const player of advanced.players) {

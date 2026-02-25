@@ -540,6 +540,87 @@ export function betrayalCommentary(attacker: Power, defender: Power): string {
 // NEAR VICTORY — when someone is close to 18 centers
 // =============================================================================
 
+// =============================================================================
+// ORDER REPORTS — per-power flavor for the orders reply chain
+// =============================================================================
+
+const ORDER_REPORT_FLAVOR: Record<Power, readonly string[]> = {
+	AUSTRIA: [
+		'Vienna dispatches its orders with characteristic anxiety.',
+		'The Habsburg war room makes its decisions. Pray they were the right ones.',
+		'Austria moves — the crossroads of Europe shifts.',
+	],
+	ENGLAND: [
+		'Whitehall issues its commands. The fleet awaits.',
+		'The Admiralty has spoken. Britannia makes her move.',
+		'Orders from London — measured, maritime, and methodical.',
+	],
+	FRANCE: [
+		'Paris sends its marching orders. Vive la stratégie.',
+		'The French general staff finalizes the plan.',
+		'France commits to action. The tricolore advances.',
+	],
+	GERMANY: [
+		'Berlin issues orders with Prussian efficiency.',
+		'The Kaiser has decided. The machine moves.',
+		'German commands go out — precise, ambitious, possibly overextended.',
+	],
+	ITALY: [
+		'Rome finally makes its move. The jackal stirs.',
+		'Italian orders arrive — fashionably late, dangerously sharp.',
+		'The boot kicks. Direction: classified until now.',
+	],
+	RUSSIA: [
+		'Orders from Moscow echo across the vast frontier.',
+		'The Bear moves. Four fronts, four decisions, four prayers.',
+		'Russian commands roll out like the steppe — broad and relentless.',
+	],
+	TURKEY: [
+		'Constantinople issues its decrees. The Sultan has spoken.',
+		'Turkish orders emerge from behind the Bosphorus.',
+		'The Ottoman war council has decided. Slow but deliberate.',
+	],
+};
+
+const NO_ORDERS_FLAVOR: Record<Power, readonly string[]> = {
+	AUSTRIA: [
+		'Vienna is silent. The Dual Monarchy drifts.',
+		'No orders from Austria. The Habsburg court is paralyzed.',
+	],
+	ENGLAND: [
+		'Silence from London. The fleet holds position.',
+		'No orders from England. Splendid isolation becomes involuntary.',
+	],
+	FRANCE: [
+		'No word from Paris. French units hold in confusion.',
+		'France sends no orders. The generals wait for instructions that never come.',
+	],
+	GERMANY: [
+		'Berlin is quiet. The machine stalls.',
+		'No orders from Germany. The center of Europe holds its breath.',
+	],
+	ITALY: [
+		'No orders from Italy. The boot stands still. Again.',
+		'Rome is silent. Perhaps they forgot they were playing.',
+	],
+	RUSSIA: [
+		'No orders from Russia. The vast army waits.',
+		'Moscow sends nothing. Four armies, four fleets, zero instructions.',
+	],
+	TURKEY: [
+		'No word from Constantinople. The Sultan naps.',
+		'Turkey sends no orders. The fortress holds by default.',
+	],
+};
+
+export function orderReportCommentary(power: Power): string {
+	return pick(ORDER_REPORT_FLAVOR[power]);
+}
+
+export function noOrdersCommentary(power: Power): string {
+	return pick(NO_ORDERS_FLAVOR[power]);
+}
+
 export function nearVictoryCommentary(power: Power, centers: number): string | null {
 	if (centers >= 17)
 		return `${power} stands at ${centers} centers — one away from victory! Can the others stop them?`;
