@@ -33,9 +33,9 @@ export const FAQ_HTML = `<!DOCTYPE html>
 
 <h2>Quick Start</h2>
 <ul>
-  <li>Mention <code>@yrstaunchally.bsky.social new game</code> to create a game</li>
-  <li>Friends mention <code>@yrstaunchally.bsky.social join #id</code> to join</li>
-  <li>Creator mentions <code>@yrstaunchally.bsky.social start #id</code> (2-7 players)</li>
+  <li>Mention <code>@yourstalwartally.bsky.social new game</code> to create a game</li>
+  <li>Friends mention <code>@yourstalwartally.bsky.social join #id</code> to join</li>
+  <li>Creator mentions <code>@yourstalwartally.bsky.social start #id</code> (2-7 players)</li>
   <li>Check your DMs for your power assignment</li>
   <li>Submit orders via DM: <code>#id A PAR - BUR; F BRE - MAO</code></li>
 </ul>
@@ -69,7 +69,7 @@ export const FAQ_HTML = `<!DOCTYPE html>
 <div class="power"><strong>Turkey</strong> — Strong defensive corner. Slow to expand but very hard to eliminate.</div>
 
 <h2>Mention Commands</h2>
-<p>All public commands are mentions of <code>@yrstaunchally.bsky.social</code>:</p>
+<p>All public commands are mentions of <code>@yourstalwartally.bsky.social</code>:</p>
 <ul>
   <li><code>new game</code> — Create a game (you auto-join)</li>
   <li><code>join #id</code> — Join an open game</li>
@@ -83,7 +83,7 @@ export const FAQ_HTML = `<!DOCTYPE html>
 </ul>
 
 <h2>DM Commands</h2>
-<p>Send direct messages to <code>@yrstaunchally.bsky.social</code>:</p>
+<p>Send direct messages to <code>@yourstalwartally.bsky.social</code>:</p>
 <ul>
   <li><code>#id A PAR - BUR; F BRE - MAO; A MAR S A PAR - BUR</code> — Submit orders</li>
   <li><code>#id possible</code> — See all legal orders for your units</li>
@@ -106,7 +106,7 @@ export const FAQ_HTML = `<!DOCTYPE html>
 
 <h2>Important Notes</h2>
 <ul>
-  <li><strong>Follow the bot</strong> — You must follow @yrstaunchally.bsky.social or it can't DM you roles and results.</li>
+  <li><strong>Follow the bot</strong> — You must follow @yourstalwartally.bsky.social or it can't DM you roles and results.</li>
   <li><strong>Orders are private</strong> — Only you can see your submitted orders until adjudication.</li>
   <li><strong>Communication is unregulated</strong> — Negotiate however you want: game threads, Bluesky DMs, Discord, group chats, carrier pigeon. The bot cannot and will not police how players talk to each other. Public negotiation in threads is encouraged because it makes the game more fun to follow, but private channels are completely fair game.</li>
   <li><strong>Civil disorder</strong> — Unassigned powers (in games with fewer than 7 players) hold all units and never build.</li>

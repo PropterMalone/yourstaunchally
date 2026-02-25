@@ -7,10 +7,11 @@ import { AtpAgent, RichText } from '@atproto/api';
 
 const BLUESKY_MAX_GRAPHEMES = 300;
 
-// Rate limiter: max 5 posts per 60s sliding window.
+// Rate limiter: max posts per sliding window.
 // Prevents burst posting that triggers Bluesky spam detection.
+// Conservative for new account — loosen once established.
 const POST_WINDOW_MS = 60_000;
-const MAX_POSTS_PER_WINDOW = 5;
+const MAX_POSTS_PER_WINDOW = 2;
 const postTimestamps: number[] = [];
 
 async function rateLimitedPost<T>(fn: () => Promise<T>): Promise<T> {
