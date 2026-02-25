@@ -101,6 +101,8 @@ export const FAQ_HTML = `<!DOCTYPE html>
   <tr><td>Convoy</td><td><code>F SEA C A FROM - TO</code></td><td><code>F MAO C A BRE - SPA</code></td></tr>
 </table>
 <p>Separate multiple orders with semicolons, commas, or newlines. Prefix every order with the game ID.</p>
+<p><strong>Partial updates:</strong> You can update orders for specific units without resubmitting everything. Send just the orders you want to change — existing orders for other units are kept. After each submission, the bot confirms your full current order set.</p>
+<p><strong>Coastal provinces:</strong> Spain, Bulgaria, and St. Petersburg have multiple coasts. Fleet moves to these provinces require a coast (e.g., <code>F MAO - SPA/NC</code>). When the coast is unambiguous — e.g., <code>F GAS - SPA</code> can only reach the north coast — the bot infers it automatically. Use <code>#id possible</code> to see the exact syntax for your options.</p>
 
 <h2>Important Notes</h2>
 <ul>
