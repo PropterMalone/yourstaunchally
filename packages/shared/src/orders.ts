@@ -157,14 +157,56 @@ export function parseOrders(input: string): ParseOrderResult[] {
 		.map(parseOrder);
 }
 
+/** Bicoastal provinces and which sea locations border each coast.
+ *  Used to auto-infer coast when a fleet targets SPA/BUL/STP without specifying. */
+const COAST_ADJACENCIES: Record<string, Record<string, string[]>> = {
+	SPA: {
+		'/NC': ['GAS', 'MAO', 'POR'],
+		'/SC': ['LYO', 'MAO', 'MAR', 'POR', 'WES'],
+	},
+	BUL: {
+		'/SC': ['AEG', 'CON', 'GRE'],
+		'/EC': ['BLA', 'CON', 'RUM'],
+	},
+	STP: {
+		'/NC': ['BAR', 'NWY'],
+		'/SC': ['BOT', 'FIN', 'LVN'],
+	},
+};
+
+/** If a fleet move targets a bicoastal province without a coast, try to infer it.
+ *  Returns the coast suffix ("/NC", "/SC", "/EC") if exactly one coast is reachable,
+ *  null if ambiguous or not applicable. */
+export function inferCoast(source: string, destination: string): string | null {
+	const coasts = COAST_ADJACENCIES[destination];
+	if (!coasts) return null; // not a bicoastal province
+	const reachable = Object.entries(coasts).filter(([_, locs]) => locs.includes(source));
+	if (reachable.length === 1) return reachable[0]?.[0] ?? null;
+	return null; // ambiguous (0 or 2 matches)
+}
+
 /**
  * Normalize an order string to the format the diplomacy library expects.
  * Uppercases, trims whitespace, normalizes spaces.
+ * Auto-infers coast for fleet moves to bicoastal provinces when unambiguous.
  */
 export function normalizeOrderString(order: string): string {
-	return order
+	let normalized = order
 		.trim()
 		.toUpperCase()
 		.replace(/\s+/g, ' ')
-		.replace(/\s*-\s*/g, ' - '); // normalize A MUN-BUR or A MUN -BUR → A MUN - BUR
+		.replace(/\s*-\s*/g, ' - ');
+
+	// Auto-infer coast for fleet moves: "F MAO - SPA" → "F MAO - SPA/NC" (if unambiguous)
+	const moveMatch = normalized.match(/^F ([A-Z]{3}(?:\/[NSEW]C)?) - ([A-Z]{3})$/);
+	if (moveMatch) {
+		const source = (moveMatch[1] ?? '').replace(/\/[NSEW]C$/, ''); // strip coast from source
+		const dest = moveMatch[2] ?? '';
+		const coast = inferCoast(source, dest);
+		if (coast) {
+			normalized = normalized.replace(/ - [A-Z]{3}$/, ` - ${dest}${coast}`);
+		}
+	}
+
+	return normalized;
 }

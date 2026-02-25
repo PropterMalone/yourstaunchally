@@ -586,8 +586,10 @@ export function createGameManager(deps: GameManagerDeps) {
 
 		db.saveGame(result.state);
 
-		// Validate each order against the legal set from the diplomacy engine
-		let illegalWarning = '';
+		// Show the full current order set (merged) with validation annotations
+		const allOrders = result.state.currentOrders[power]?.orders ?? orders;
+		const newOrderSet = new Set(orders.map((o) => o.toUpperCase()));
+
 		if (state.diplomacyState) {
 			try {
 				const { getPossibleOrders } = await import('./adjudicator.js');
@@ -597,38 +599,42 @@ export function createGameManager(deps: GameManagerDeps) {
 
 				const annotated: string[] = [];
 				let illegalCount = 0;
-				for (const order of orders) {
-					if (allLegal.some((legal) => legal.toUpperCase() === order.toUpperCase())) {
-						annotated.push(legalOrderAnnotation(order));
-					} else {
+				for (const order of allOrders) {
+					const isNew = newOrderSet.has(order.toUpperCase());
+					const isLegal = allLegal.some((legal) => legal.toUpperCase() === order.toUpperCase());
+					if (!isLegal) {
 						annotated.push(illegalOrderAnnotation(order));
 						illegalCount++;
+					} else if (isNew) {
+						annotated.push(legalOrderAnnotation(order));
+					} else {
+						annotated.push(`  ${order}`);
 					}
 				}
 
+				let illegalWarning = '';
 				if (illegalCount > 0) {
-					illegalWarning = `\n\n${illegalOrderCommentary(illegalCount, orders.length)}`;
+					illegalWarning = `\n\n${illegalOrderCommentary(illegalCount, allOrders.length)}`;
 				}
 
 				const orderSummary = annotated.join('\n');
 				await dmSender.sendDm(
 					dm.senderDid,
-					`Orders for ${power} in #${command.gameId} (${orders.length} order${orders.length === 1 ? '' : 's'}):\n${orderSummary}${illegalWarning}\n\nSend new orders to replace these.`,
+					`${power} orders for #${command.gameId} (${allOrders.length}):\n${orderSummary}${illegalWarning}\n\nSend orders for specific units to update them.`,
 				);
 			} catch (error) {
-				// Validation failed — still confirm orders were saved, just skip validation
 				console.warn(`[orders] Validation failed for #${command.gameId}: ${error}`);
-				const orderSummary = orders.join('\n');
+				const orderSummary = allOrders.join('\n');
 				await dmSender.sendDm(
 					dm.senderDid,
-					`✓ Orders for ${power} in #${command.gameId} (${orders.length} order${orders.length === 1 ? '' : 's'}):\n${orderSummary}\n\nSend new orders to replace these. DM "#${command.gameId} possible" to see all options.`,
+					`✓ ${power} orders for #${command.gameId} (${allOrders.length}):\n${orderSummary}\n\nSend orders for specific units to update them.`,
 				);
 			}
 		} else {
-			const orderSummary = orders.join('\n');
+			const orderSummary = allOrders.join('\n');
 			await dmSender.sendDm(
 				dm.senderDid,
-				`✓ Orders for ${power} in #${command.gameId} (${orders.length} order${orders.length === 1 ? '' : 's'}):\n${orderSummary}\n\nSend new orders to replace these. DM "#${command.gameId} possible" to see all options.`,
+				`✓ ${power} orders for #${command.gameId} (${allOrders.length}):\n${orderSummary}\n\nSend orders for specific units to update them.`,
 			);
 		}
 

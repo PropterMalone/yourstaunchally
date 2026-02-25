@@ -175,9 +175,19 @@ export function submitOrders(
 		return { ok: false, error: `No player assigned to ${power}` };
 	}
 
+	// Merge with existing orders: new orders replace by unit location, existing ones are kept.
+	// Unit location = first two tokens (e.g. "A PAR" from "A PAR - BUR").
+	const existing = state.currentOrders[power]?.orders ?? [];
+	const newUnitKeys = new Set(orders.map((o) => o.split(/\s+/).slice(0, 2).join(' ')));
+	const kept = existing.filter((o) => {
+		const key = o.split(/\s+/).slice(0, 2).join(' ');
+		return !newUnitKeys.has(key);
+	});
+	const merged = [...kept, ...orders];
+
 	const phaseOrders: PhaseOrders = {
 		power,
-		orders,
+		orders: merged,
 		submittedAt: now,
 	};
 

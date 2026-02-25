@@ -172,7 +172,7 @@ describe('submitOrders', () => {
 		expect(result.ok).toBe(false);
 	});
 
-	it('allows overwriting previous orders', () => {
+	it('allows overwriting previous orders for same unit', () => {
 		const game = activeGame();
 		const r1 = submitOrders(game, 'AUSTRIA', ['A BUD H']);
 		if (!r1.ok) throw new Error('setup');
@@ -180,6 +180,33 @@ describe('submitOrders', () => {
 		expect(r2.ok).toBe(true);
 		if (r2.ok) {
 			expect(r2.state.currentOrders['AUSTRIA']?.orders).toEqual(['A BUD - SER']);
+		}
+	});
+
+	it('merges partial submissions with existing orders', () => {
+		const game = activeGame();
+		const r1 = submitOrders(game, 'AUSTRIA', ['A BUD - SER', 'A VIE - BUD', 'F TRI - ALB']);
+		if (!r1.ok) throw new Error('setup');
+		// Submit new order for only F TRI — should keep A BUD and A VIE
+		const r2 = submitOrders(r1.state, 'AUSTRIA', ['F TRI H']);
+		expect(r2.ok).toBe(true);
+		if (r2.ok) {
+			expect(r2.state.currentOrders['AUSTRIA']?.orders).toEqual([
+				'A BUD - SER',
+				'A VIE - BUD',
+				'F TRI H',
+			]);
+		}
+	});
+
+	it('full resubmission replaces all orders', () => {
+		const game = activeGame();
+		const r1 = submitOrders(game, 'AUSTRIA', ['A BUD - SER', 'A VIE - BUD', 'F TRI - ALB']);
+		if (!r1.ok) throw new Error('setup');
+		const r2 = submitOrders(r1.state, 'AUSTRIA', ['A BUD H', 'A VIE H', 'F TRI H']);
+		expect(r2.ok).toBe(true);
+		if (r2.ok) {
+			expect(r2.state.currentOrders['AUSTRIA']?.orders).toEqual(['A BUD H', 'A VIE H', 'F TRI H']);
 		}
 	});
 });
