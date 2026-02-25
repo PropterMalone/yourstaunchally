@@ -154,9 +154,9 @@ export function parseDm(text: string): DmCommand {
 		return { type: 'show_possible', gameId };
 	}
 
-	// Parse as order lines (semicolon or newline separated)
+	// Parse as order lines (semicolon, comma, or newline separated)
 	const orderLines = rest
-		.split(/[;\n]/)
+		.split(/[;,\n]/)
 		.map((line) => line.trim())
 		.filter((line) => line.length > 0);
 
