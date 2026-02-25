@@ -7,6 +7,26 @@ import { AtpAgent, RichText } from '@atproto/api';
 
 const BLUESKY_MAX_GRAPHEMES = 300;
 
+// Rate limiter: max 5 posts per 60s sliding window.
+// Prevents burst posting that triggers Bluesky spam detection.
+const POST_WINDOW_MS = 60_000;
+const MAX_POSTS_PER_WINDOW = 5;
+const postTimestamps: number[] = [];
+
+async function rateLimitedPost<T>(fn: () => Promise<T>): Promise<T> {
+	const now = Date.now();
+	while (postTimestamps.length > 0 && (postTimestamps[0] ?? 0) < now - POST_WINDOW_MS) {
+		postTimestamps.shift();
+	}
+	if (postTimestamps.length >= MAX_POSTS_PER_WINDOW) {
+		const waitMs = (postTimestamps[0] ?? now) + POST_WINDOW_MS - now + 100;
+		console.log(`Rate limit: waiting ${Math.round(waitMs / 1000)}s before posting`);
+		await new Promise((r) => setTimeout(r, waitMs));
+	}
+	postTimestamps.push(Date.now());
+	return fn();
+}
+
 /** Count graphemes using Intl.Segmenter (handles emoji/multi-byte correctly) */
 export function graphemeLength(text: string): number {
 	const segmenter = new Intl.Segmenter('en', { granularity: 'grapheme' });
@@ -119,7 +139,7 @@ export async function postMessage(
 			values: labels.map((val) => ({ val })),
 		};
 	}
-	const response = await agent.post(record);
+	const response = await rateLimitedPost(() => agent.post(record));
 	return { uri: response.uri, cid: response.cid };
 }
 
@@ -148,7 +168,7 @@ export async function replyToPost(
 			values: labels.map((val) => ({ val })),
 		};
 	}
-	const response = await agent.post(record);
+	const response = await rateLimitedPost(() => agent.post(record));
 	return { uri: response.uri, cid: response.cid };
 }
 
@@ -302,7 +322,7 @@ export async function postWithQuote(
 			values: labels.map((val) => ({ val })),
 		};
 	}
-	const response = await agent.post(record);
+	const response = await rateLimitedPost(() => agent.post(record));
 	return { uri: response.uri, cid: response.cid };
 }
 
