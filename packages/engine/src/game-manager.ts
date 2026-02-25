@@ -286,7 +286,7 @@ export function createGameManager(deps: GameManagerDeps) {
 				try {
 					await dmSender.sendDm(
 						player.did,
-						`Game #${started.gameId} has started! You are ${player.power}.\n\n${powerAssignmentCommentary(player.power)}\n\nYour units: ${unitList}\n\nSubmit orders via DM:\n#${started.gameId} ${exampleOrder}; ...\n\nSeparate orders with semicolons. DM "#${started.gameId} possible" to see all options.\n\nDeadline: ${started.phaseDeadline ? formatAbsoluteDeadline(started.phaseDeadline) : '?'}`,
+						`Game #${started.gameId} has started! You are ${player.power}.\n\n${powerAssignmentCommentary(player.power)}\n\nYour units: ${unitList}\n\nSubmit orders via DM:\n#${started.gameId} ${exampleOrder}; ...\n\nSeparate orders with semicolons, commas, or newlines. DM "#${started.gameId} possible" to see all options.\n\nDeadline: ${started.phaseDeadline ? formatAbsoluteDeadline(started.phaseDeadline) : '?'}`,
 					);
 				} catch (error) {
 					console.warn(`[dm] Failed to DM ${player.handle}: ${error}`);
@@ -538,7 +538,7 @@ export function createGameManager(deps: GameManagerDeps) {
 			case 'help':
 				await dmSender.sendDm(
 					dm.senderDid,
-					'DM commands:\n\n#gameId A PAR - BUR; F BRE - MAO \u2014 Submit orders\n#gameId possible \u2014 See legal orders\n#gameId orders \u2014 Review submitted orders\nmy games \u2014 List your active games\n\nSeparate orders with semicolons. All deadlines are UTC.',
+					'DM commands:\n\n#gameId A PAR - BUR; F BRE - MAO \u2014 Submit orders\n#gameId possible \u2014 See legal orders\n#gameId orders \u2014 Review submitted orders\nmy games \u2014 List your active games\n\nSeparate orders with semicolons, commas, or newlines. All deadlines are UTC.',
 				);
 				break;
 			case 'game_menu':
