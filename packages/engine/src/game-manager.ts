@@ -739,8 +739,9 @@ export function createGameManager(deps: GameManagerDeps) {
 
 		const lines: string[] = [];
 		for (const [loc, orders] of Object.entries(powerOrders)) {
+			const display = orders.map((o) => o.replace(/ VIA$/, ' (via convoy)'));
 			lines.push(
-				`${loc} (${orders.length} options): ${orders.slice(0, 4).join(', ')}${orders.length > 4 ? ` (+${orders.length - 4} more)` : ''}`,
+				`${loc} (${display.length} options): ${display.slice(0, 4).join(', ')}${display.length > 4 ? ` (+${display.length - 4} more)` : ''}`,
 			);
 		}
 

@@ -195,7 +195,8 @@ export function normalizeOrderString(order: string): string {
 		.trim()
 		.toUpperCase()
 		.replace(/\s+/g, ' ')
-		.replace(/\s*-\s*/g, ' - ');
+		.replace(/\s*-\s*/g, ' - ')
+		.replace(/\(VIA CONVOY\)/, 'VIA');
 
 	// Auto-infer coast for fleet moves: "F MAO - SPA" → "F MAO - SPA/NC" (if unambiguous)
 	const moveMatch = normalized.match(/^F ([A-Z]{3}(?:\/[NSEW]C)?) - ([A-Z]{3})$/);
