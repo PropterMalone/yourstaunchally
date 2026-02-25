@@ -105,6 +105,11 @@ export async function setOrdersAndProcess(
 	centers: Record<Power, string[]>;
 	isGameDone: boolean;
 	svg?: string;
+	/** Orders and their outcomes from the just-processed phase */
+	orderResults?: {
+		orders: Record<string, string[]>;
+		results: Record<string, string[]>;
+	};
 }> {
 	const result = await callAdjudicator({
 		op: 'set_orders_and_process',
@@ -119,6 +124,9 @@ export async function setOrdersAndProcess(
 		centers: result['centers'] as Record<Power, string[]>,
 		isGameDone: result['is_game_done'] as boolean,
 		svg: result['svg'] as string | undefined,
+		orderResults: result['order_results'] as
+			| { orders: Record<string, string[]>; results: Record<string, string[]> }
+			| undefined,
 	};
 }
 
