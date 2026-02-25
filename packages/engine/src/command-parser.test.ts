@@ -119,6 +119,15 @@ describe('parseDm', () => {
 		});
 	});
 
+	it('parses comma-separated orders', () => {
+		const result = parseDm('#abc123 A VEN - TYR, A ROM - VEN, F NAP - ION');
+		expect(result).toEqual({
+			type: 'submit_orders',
+			gameId: 'abc123',
+			orderLines: ['A VEN - TYR', 'A ROM - VEN', 'F NAP - ION'],
+		});
+	});
+
 	it('parses "orders" query', () => {
 		expect(parseDm('#abc123 orders')).toEqual({ type: 'show_orders', gameId: 'abc123' });
 	});
