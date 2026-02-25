@@ -35,6 +35,7 @@ export function createChatAgent(agent: AtpAgent): AtpAgent {
  */
 export function createBlueskyDmSender(chatAgent: AtpAgent): DmSender {
 	const convoCache = new Map<string, string>(); // did → convoId
+	let lastDmTime = 0;
 
 	async function getOrCreateConvo(recipientDid: string): Promise<string> {
 		const cached = convoCache.get(recipientDid);
@@ -50,6 +51,14 @@ export function createBlueskyDmSender(chatAgent: AtpAgent): DmSender {
 
 	return {
 		async sendDm(recipientDid: string, text: string): Promise<void> {
+			// Rate limit: minimum 2s between DMs to avoid spam detection
+			const now = Date.now();
+			const elapsed = now - lastDmTime;
+			if (elapsed < 2000) {
+				await new Promise((r) => setTimeout(r, 2000 - elapsed));
+			}
+			lastDmTime = Date.now();
+
 			const convoId = await getOrCreateConvo(recipientDid);
 			await chatAgent.chat.bsky.convo.sendMessage({
 				convoId,

@@ -995,20 +995,14 @@ export function createGameManager(deps: GameManagerDeps) {
 		}
 	}
 
-	/** Status update interval escalates as deadline approaches:
-	 *  >12h remaining → every 12h
-	 *  9-12h → every 3h
-	 *  6-9h → every 3h
-	 *  1-6h → every 1h
-	 *  30m-1h → every 30m
-	 *  <30m → every 15m */
+	/** Status update posts at 3 fixed checkpoints to minimize post volume:
+	 *  ~24h, ~6h, ~1h remaining. Returns the interval to wait before the next post. */
 	function statusUpdateInterval(msRemaining: number): number {
 		const HOUR = 60 * 60 * 1000;
-		if (msRemaining > 12 * HOUR) return 12 * HOUR;
-		if (msRemaining > 6 * HOUR) return 3 * HOUR;
-		if (msRemaining > 1 * HOUR) return 1 * HOUR;
-		if (msRemaining > 30 * 60 * 1000) return 30 * 60 * 1000;
-		return 15 * 60 * 1000;
+		if (msRemaining > 24 * HOUR) return 24 * HOUR;
+		if (msRemaining > 6 * HOUR) return 18 * HOUR; // next at ~6h
+		if (msRemaining > 1 * HOUR) return 5 * HOUR; // next at ~1h
+		return 24 * HOUR; // already past the last checkpoint — don't post again
 	}
 
 	/** Post a periodic status update for a game if enough time has passed */
@@ -1031,8 +1025,7 @@ export function createGameManager(deps: GameManagerDeps) {
 
 		const timeLeft = formatRelativeDeadline(state.phaseDeadline as string);
 
-		const playerTags = state.players.map((p) => `@${p.handle}`).join(' ');
-		const statusMsg = `📊 Game #${state.gameId} — ${state.currentPhase}\n\n${ordersIn}/${totalPlayers} orders in. ${timeLeft}.\n\n${playerTags}`;
+		const statusMsg = `📊 Game #${state.gameId} — ${state.currentPhase}\n\n${ordersIn}/${totalPlayers} orders in. ${timeLeft}.`;
 
 		try {
 			const prevPost = db.getLatestGamePost(state.gameId);
