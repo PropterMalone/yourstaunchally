@@ -175,4 +175,23 @@ describe('parseDm', () => {
 	it('accepts "#gameId help" as show_possible', () => {
 		expect(parseDm('#abc123 help')).toEqual({ type: 'show_possible', gameId: 'abc123' });
 	});
+
+	it('parses "map" query', () => {
+		expect(parseDm('#abc123 map')).toEqual({ type: 'show_map', gameId: 'abc123' });
+	});
+
+	it('parses "show map" query', () => {
+		expect(parseDm('#abc123 show map')).toEqual({ type: 'show_map', gameId: 'abc123' });
+	});
+
+	it('parses "possible moves" as show_possible (not order submission)', () => {
+		expect(parseDm('#abc123 possible moves')).toEqual({ type: 'show_possible', gameId: 'abc123' });
+	});
+
+	it('parses "possible orders" as show_possible', () => {
+		expect(parseDm('#abc123 possible orders')).toEqual({
+			type: 'show_possible',
+			gameId: 'abc123',
+		});
+	});
 });

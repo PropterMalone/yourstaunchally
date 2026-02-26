@@ -1,4 +1,4 @@
-# YourStaunchAlly: Diplomacy on Bluesky
+# YSA: Diplomacy on Bluesky
 
 ## Project Purpose
 
