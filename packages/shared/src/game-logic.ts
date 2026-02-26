@@ -177,9 +177,15 @@ export function submitOrders(
 
 	// Merge with existing orders: new orders replace by unit location, existing ones are kept.
 	// Unit location = first two tokens (e.g. "A PAR" from "A PAR - BUR").
+	// WAIVE is special: multiple WAIVEs are distinct (one per skipped build), so if the new
+	// submission includes any WAIVEs, all existing WAIVEs are replaced wholesale.
 	const existing = state.currentOrders[power]?.orders ?? [];
-	const newUnitKeys = new Set(orders.map((o) => o.split(/\s+/).slice(0, 2).join(' ')));
+	const newUnitKeys = new Set(
+		orders.filter((o) => o !== 'WAIVE').map((o) => o.split(/\s+/).slice(0, 2).join(' ')),
+	);
+	const hasNewWaives = orders.some((o) => o === 'WAIVE');
 	const kept = existing.filter((o) => {
+		if (o === 'WAIVE') return !hasNewWaives;
 		const key = o.split(/\s+/).slice(0, 2).join(' ');
 		return !newUnitKeys.has(key);
 	});

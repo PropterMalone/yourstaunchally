@@ -209,6 +209,37 @@ describe('submitOrders', () => {
 			expect(r2.state.currentOrders['AUSTRIA']?.orders).toEqual(['A BUD H', 'A VIE H', 'F TRI H']);
 		}
 	});
+
+	it('preserves multiple WAIVEs in a single submission', () => {
+		const game = activeGame();
+		const r = submitOrders(game, 'AUSTRIA', ['A BUD B', 'WAIVE', 'WAIVE']);
+		expect(r.ok).toBe(true);
+		if (r.ok) {
+			expect(r.state.currentOrders['AUSTRIA']?.orders).toEqual(['A BUD B', 'WAIVE', 'WAIVE']);
+		}
+	});
+
+	it('replaces all existing WAIVEs when new submission includes WAIVEs', () => {
+		const game = activeGame();
+		const r1 = submitOrders(game, 'AUSTRIA', ['A BUD B', 'WAIVE', 'WAIVE']);
+		if (!r1.ok) throw new Error('setup');
+		const r2 = submitOrders(r1.state, 'AUSTRIA', ['WAIVE']);
+		expect(r2.ok).toBe(true);
+		if (r2.ok) {
+			expect(r2.state.currentOrders['AUSTRIA']?.orders).toEqual(['A BUD B', 'WAIVE']);
+		}
+	});
+
+	it('keeps existing WAIVEs when new submission has no WAIVEs', () => {
+		const game = activeGame();
+		const r1 = submitOrders(game, 'AUSTRIA', ['A BUD B', 'WAIVE']);
+		if (!r1.ok) throw new Error('setup');
+		const r2 = submitOrders(r1.state, 'AUSTRIA', ['A BUD - SER']);
+		expect(r2.ok).toBe(true);
+		if (r2.ok) {
+			expect(r2.state.currentOrders['AUSTRIA']?.orders).toEqual(['WAIVE', 'A BUD - SER']);
+		}
+	});
 });
 
 describe('getPendingPowers / allOrdersSubmitted', () => {

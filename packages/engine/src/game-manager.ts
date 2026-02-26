@@ -14,6 +14,7 @@ import {
 	checkSoloVictory,
 	claimPower,
 	createGame,
+	expandWaives,
 	finishGameSoloVictory,
 	formatCenterCounts,
 	generateGameId,
@@ -593,7 +594,7 @@ export function createGameManager(deps: GameManagerDeps) {
 			return;
 		}
 
-		const normalized = command.orderLines.map(normalizeOrderString);
+		const normalized = expandWaives(command.orderLines).map(normalizeOrderString);
 		const orders = normalized.filter((o) => parseOrder(o).ok);
 		const dropped = normalized.filter((o) => !parseOrder(o).ok);
 		if (dropped.length > 0) {
