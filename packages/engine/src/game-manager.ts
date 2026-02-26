@@ -1029,7 +1029,8 @@ export function createGameManager(deps: GameManagerDeps) {
 			const phaseChunks = splitIntoPosts(fullMsg);
 
 			// Ensure we have a map — adjudicator should return one, but render explicitly if missing
-			const mapSvg = (adjResult.svg ?? (await renderMap(advanced.diplomacyState).then((r) => r.svg))) as string;
+			const mapSvg = (adjResult.svg ??
+				(await renderMap(advanced.diplomacyState).then((r) => r.svg))) as string;
 			const mapAlt = `Diplomacy map — ${seasonName} ${phase.year}`;
 			const firstChunk = phaseChunks[0] as string;
 			const phasePost = await postWithMapSvg(agent, firstChunk, mapSvg, mapAlt);

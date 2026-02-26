@@ -11,10 +11,16 @@ const BOT_HANDLE = 'yourstaunchally.bsky.social';
 const POLL_INTERVAL = 5000; // 5s between checks
 const MAX_WAIT = 120_000; // 2 min max wait
 
-const ACCOUNTS = [
-	{ identifier: 'bobbyquine.bsky.social', password: '24f5-rs2m-3xjo-p4gq' },
-	{ identifier: 'jackautomatic.bsky.social', password: 'vbh_gdw*qtc6RTE0jdg' },
-];
+/**
+ * Reads test accounts from scripts/accounts.json (gitignored).
+ * Uses the first two accounts in the array.
+ */
+import { readFileSync } from 'node:fs';
+const allAccounts = JSON.parse(readFileSync(new URL('./accounts.json', import.meta.url), 'utf8'));
+const ACCOUNTS = allAccounts.slice(0, 2).map(a => ({
+	identifier: a.handle ?? a.identifier,
+	password: a.password,
+}));
 
 /** Post a mention to the bot with proper facets */
 async function mentionBot(agent, command) {

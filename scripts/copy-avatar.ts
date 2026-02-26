@@ -4,7 +4,7 @@
  */
 import { AtpAgent } from '@atproto/api';
 
-const OLD_DID = 'did:plc:toqyodwleo2w7x2jnvbwdhle'; // yourstaunchally.bsky.social
+const OLD_DID = 'did:plc:omulzw3powc5grj2t7djgt7t'; // yourstalwartally.bsky.social
 
 async function main() {
 	const identifier = process.env['BSKY_IDENTIFIER'];

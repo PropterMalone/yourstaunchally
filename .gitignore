@@ -5,6 +5,7 @@ coverage/
 *.db
 *.db-journal
 data/
+scripts/accounts.json
 .venv/
 __pycache__/
 *.pyc
