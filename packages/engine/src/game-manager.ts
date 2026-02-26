@@ -21,6 +21,7 @@ import {
 	getPowerForPlayer,
 	isDeadlinePassed,
 	normalizeOrderString,
+	parseOrder,
 	parsePhase,
 	removePlayer,
 	startGame,
@@ -47,7 +48,6 @@ import {
 	illegalOrderCommentary,
 	legalOrderAnnotation,
 	nearVictoryCommentary,
-	orderReportCommentary,
 	phaseCommentary,
 	powerAssignmentCommentary,
 	soloVictoryCommentary,
@@ -105,9 +105,18 @@ export function createGameManager(deps: GameManagerDeps) {
 	/** Per-game lock — prevents double-adjudication from concurrent tick + order submission */
 	const processingGames = new Set<string>();
 
-	/** Per-game consecutive failure count — backoff to avoid hammering a broken adjudicator */
-	const gameFailureCount = new Map<string, number>();
+	/** Per-game consecutive failure count — persisted to DB so backoff survives restarts */
 	const MAX_CONSECUTIVE_FAILURES = 3;
+	function getFailureCount(gameId: string): number {
+		const val = db.getBotState(`failure_count_${gameId}`);
+		return val ? Number(val) : 0;
+	}
+	function setFailureCount(gameId: string, count: number): void {
+		db.setBotState(`failure_count_${gameId}`, String(count));
+	}
+	function clearFailureCount(gameId: string): void {
+		db.setBotState(`failure_count_${gameId}`, '0');
+	}
 
 	async function handleMention(notification: MentionNotification): Promise<void> {
 		if (processedMentionUris.has(notification.uri)) return;
@@ -121,6 +130,9 @@ export function createGameManager(deps: GameManagerDeps) {
 		}
 
 		const command = parseMention(notification.text);
+		console.log(
+			`[mention] @${notification.authorHandle}: "${notification.text}" → ${command.type}`,
+		);
 		const reply = async (text: string) => {
 			await replyThread(
 				agent,
@@ -529,6 +541,7 @@ export function createGameManager(deps: GameManagerDeps) {
 
 	async function handleDm(dm: InboundDm): Promise<void> {
 		const command = parseDm(dm.text);
+		console.log(`[dm] ${dm.senderDid.slice(-8)}: "${dm.text.slice(0, 100)}" → ${command.type}`);
 
 		switch (command.type) {
 			case 'submit_orders':
@@ -539,6 +552,9 @@ export function createGameManager(deps: GameManagerDeps) {
 				break;
 			case 'show_possible':
 				await handleShowPossible(command, dm);
+				break;
+			case 'show_map':
+				await handleShowMap(command, dm);
 				break;
 			case 'my_games':
 				await handleMyGames(dm);
@@ -577,17 +593,35 @@ export function createGameManager(deps: GameManagerDeps) {
 			return;
 		}
 
-		const orders = command.orderLines.map(normalizeOrderString);
+		const normalized = command.orderLines.map(normalizeOrderString);
+		const orders = normalized.filter((o) => parseOrder(o).ok);
+		const dropped = normalized.filter((o) => !parseOrder(o).ok);
+		if (dropped.length > 0) {
+			console.log(
+				`[orders] #${command.gameId} ${power}: dropped ${dropped.length} unparseable: ${dropped.join(', ')}`,
+			);
+		}
+		if (orders.length === 0) {
+			await dmSender.sendDm(
+				dm.senderDid,
+				`None of those look like valid orders. Format: A PAR - BUR or F MAO C A BRE - SPA\n\nDM "#${command.gameId} possible" to see your options.`,
+			);
+			return;
+		}
 		const result = submitOrders(state, power, orders);
 		if (!result.ok) {
+			console.log(`[orders] #${command.gameId} ${power}: rejected — ${result.error}`);
 			await dmSender.sendDm(dm.senderDid, result.error);
 			return;
 		}
 
+		const allOrders = result.state.currentOrders[power]?.orders ?? orders;
+		console.log(
+			`[orders] #${command.gameId} ${power}: ${allOrders.length} orders — ${allOrders.join(', ')}`,
+		);
 		db.saveGame(result.state);
 
 		// Show the full current order set (merged) with validation annotations
-		const allOrders = result.state.currentOrders[power]?.orders ?? orders;
 		const newOrderSet = new Set(orders.map((o) => o.toUpperCase()));
 
 		if (state.diplomacyState) {
@@ -754,6 +788,28 @@ export function createGameManager(deps: GameManagerDeps) {
 		await dmSender.sendDm(dm.senderDid, msg);
 	}
 
+	async function handleShowMap(
+		command: DmCommand & { type: 'show_map' },
+		dm: InboundDm,
+	): Promise<void> {
+		const state = db.loadGame(command.gameId);
+		if (!state) {
+			await dmSender.sendDm(dm.senderDid, `Game #${command.gameId} not found.`);
+			return;
+		}
+
+		// Find the latest phase or game_start post (these have maps attached)
+		const mapPost = db.getLatestMapPost(command.gameId);
+		if (!mapPost) {
+			await dmSender.sendDm(dm.senderDid, `No map available yet for #${command.gameId}.`);
+			return;
+		}
+
+		const bskyUrl = atUriToBskyUrl(mapPost.uri);
+		const phase = state.currentPhase ?? 'unknown';
+		await dmSender.sendDm(dm.senderDid, `Map for #${command.gameId} (${phase}):\n${bskyUrl}`);
+	}
+
 	async function handleMyGames(dm: InboundDm): Promise<void> {
 		const activeGames = db.loadActiveGames();
 		const lobbyGames = db.loadLobbyGames();
@@ -808,7 +864,7 @@ export function createGameManager(deps: GameManagerDeps) {
 	}
 
 	/** Post submitted orders + outcomes as replies to the phase result post.
-	 *  One reply per power. Chains within a power if orders exceed 300 graphemes. */
+	 *  One reply per power. Splits into multiple posts if a power's orders exceed 300 graphemes. */
 	async function postOrdersReply(
 		state: GameState,
 		orderResults: { orders: Record<string, string[]>; results: Record<string, string[]> },
@@ -822,7 +878,6 @@ export function createGameManager(deps: GameManagerDeps) {
 
 			const player = state.players.find((p) => p.power === power);
 			const handle = player ? `@${player.handle}` : 'Civil Disorder';
-			const flavor = orderReportCommentary(power as import('@yourstaunchally/shared').Power);
 
 			const orderLines: string[] = [];
 			for (const order of orders) {
@@ -833,7 +888,7 @@ export function createGameManager(deps: GameManagerDeps) {
 				orderLines.push(`  ${order}${outcome}`);
 			}
 
-			const text = `${power} (${handle})\n${flavor}\n\n${orderLines.join('\n')}`;
+			const text = `${power} (${handle})\n\n${orderLines.join('\n')}`;
 			const chunks = splitIntoPosts(text);
 
 			for (const chunk of chunks) {
@@ -865,14 +920,24 @@ export function createGameManager(deps: GameManagerDeps) {
 		processingGames.add(state.gameId);
 
 		try {
-			// Build orders map for the adjudicator
+			// Build orders map for the adjudicator — only include parseable orders.
+			// Invalid orders silently become holds (civil disorder behavior).
 			const ordersMap: Record<string, string[]> = {};
 			for (const power of POWERS) {
 				const phaseOrders = state.currentOrders[power];
 				if (phaseOrders) {
-					ordersMap[power] = phaseOrders.orders;
+					const validOrders = phaseOrders.orders.filter((o) => parseOrder(o).ok);
+					if (validOrders.length > 0) {
+						ordersMap[power] = validOrders;
+					}
+					if (validOrders.length < phaseOrders.orders.length) {
+						const dropped = phaseOrders.orders.length - validOrders.length;
+						console.warn(
+							`[phase] #${state.gameId} ${power}: dropped ${dropped} unparseable order(s)`,
+						);
+					}
 				}
-				// Powers without orders → civil disorder (hold all units, handled by Python lib)
+				// Powers without valid orders → civil disorder (hold all units, handled by Python lib)
 			}
 
 			const adjResult = await adj.setOrdersAndProcess(
@@ -882,7 +947,7 @@ export function createGameManager(deps: GameManagerDeps) {
 			);
 
 			// Adjudication succeeded — clear failure count
-			gameFailureCount.delete(state.gameId);
+			clearFailureCount(state.gameId);
 
 			// Check for solo victory
 			const victory = checkSoloVictory(adjResult.centers);
@@ -904,12 +969,14 @@ export function createGameManager(deps: GameManagerDeps) {
 					? `👑 Game #${state.gameId}: ${soloVictoryCommentary(victory.winner)}\n\n${standings}`
 					: `🤝 Game #${state.gameId}: ${drawCommentary()}\n\n${standings}`;
 
-				const prevPost = db.getLatestGamePost(state.gameId);
-				const victoryPost = adjResult.svg
-					? await postWithMapSvg(agent, msg, adjResult.svg, `Final map — Game #${state.gameId}`)
-					: prevPost
-						? await postWithQuote(agent, msg, prevPost.uri, prevPost.cid)
-						: await postThread(agent, msg);
+				const finalSvg = (adjResult.svg ??
+					(await renderMap(finished.diplomacyState).then((r) => r.svg))) as string;
+				const victoryPost = await postWithMapSvg(
+					agent,
+					msg,
+					finalSvg,
+					`Final map — Game #${state.gameId}`,
+				);
 				recordAndLabel(
 					victoryPost.uri,
 					victoryPost.cid,
@@ -957,26 +1024,41 @@ export function createGameManager(deps: GameManagerDeps) {
 			const extras = [...centerChanges, ...victoryWarnings];
 			const extrasBlock = extras.length > 0 ? `\n\n${extras.join('\n')}` : '';
 
-			const phaseMsg = `📜 Game #${state.gameId}: ${seasonName} ${phase.year} ${phaseTypeName}\n\n${phaseCommentary(phase.type)}\n\n${formatCenterCounts(adjResult.centers)}${extrasBlock}\n\nDeadline: ${deadlineDisplay}`;
+			// Build full phase message, then split across posts (first post gets the map)
+			const fullMsg = `📜 Game #${state.gameId}: ${seasonName} ${phase.year} ${phaseTypeName}\n\n${phaseCommentary(phase.type)}\n\n${formatCenterCounts(adjResult.centers)}${extrasBlock}\n\nDeadline: ${deadlineDisplay}`;
+			const phaseChunks = splitIntoPosts(fullMsg);
 
-			// QT previous thread for connective tissue (maps skip QT — they're visual context)
-			const prevPost = db.getLatestGamePost(state.gameId);
-			const phasePost = adjResult.svg
-				? await postWithMapSvg(
-						agent,
-						phaseMsg,
-						adjResult.svg,
-						`Diplomacy map — ${seasonName} ${phase.year}`,
-					)
-				: prevPost
-					? await postWithQuote(agent, phaseMsg, prevPost.uri, prevPost.cid)
-					: await postThread(agent, phaseMsg);
+			// Ensure we have a map — adjudicator should return one, but render explicitly if missing
+			const mapSvg = (adjResult.svg ?? (await renderMap(advanced.diplomacyState).then((r) => r.svg))) as string;
+			const mapAlt = `Diplomacy map — ${seasonName} ${phase.year}`;
+			const firstChunk = phaseChunks[0] as string;
+			const phasePost = await postWithMapSvg(agent, firstChunk, mapSvg, mapAlt);
 			recordAndLabel(phasePost.uri, phasePost.cid, state.gameId, botDid, 'phase', adjResult.phase);
+
+			// Remaining chunks: post as replies in the thread
+			let orderReplyParent = phasePost;
+			for (let i = 1; i < phaseChunks.length; i++) {
+				try {
+					const chunk = phaseChunks[i] as string;
+					const reply = await replyToPost(
+						agent,
+						chunk,
+						orderReplyParent.uri,
+						orderReplyParent.cid,
+						phasePost.uri,
+						phasePost.cid,
+					);
+					recordAndLabel(reply.uri, reply.cid, state.gameId, botDid, 'phase', adjResult.phase);
+					orderReplyParent = reply;
+				} catch (error) {
+					console.warn(`[phase] Failed to post phase chunk ${i} for #${state.gameId}: ${error}`);
+				}
+			}
 
 			// Reply with the submitted orders so everyone can see what happened
 			if (adjResult.orderResults) {
 				try {
-					await postOrdersReply(state, adjResult.orderResults, phasePost);
+					await postOrdersReply(state, adjResult.orderResults, orderReplyParent);
 				} catch (error) {
 					console.warn(`[phase] Failed to post orders reply for #${state.gameId}: ${error}`);
 				}
@@ -1071,12 +1153,12 @@ export function createGameManager(deps: GameManagerDeps) {
 
 			if (isDeadlinePassed(state, now)) {
 				// Backoff: skip games that have failed too many times consecutively
-				const failures = gameFailureCount.get(state.gameId) ?? 0;
+				const failures = getFailureCount(state.gameId);
 				if (failures >= MAX_CONSECUTIVE_FAILURES) {
 					// Only retry every 10th tick (~10 min) after hitting the limit
 					const backoffTick = failures - MAX_CONSECUTIVE_FAILURES;
 					if (backoffTick % 10 !== 0) {
-						gameFailureCount.set(state.gameId, failures + 1);
+						setFailureCount(state.gameId, failures + 1);
 						continue;
 					}
 				}
@@ -1085,8 +1167,8 @@ export function createGameManager(deps: GameManagerDeps) {
 					console.log(`[tick] Deadline passed for #${state.gameId}, processing phase`);
 					await processPhase(state);
 				} catch (error) {
-					const newCount = (gameFailureCount.get(state.gameId) ?? 0) + 1;
-					gameFailureCount.set(state.gameId, newCount);
+					const newCount = getFailureCount(state.gameId) + 1;
+					setFailureCount(state.gameId, newCount);
 					console.error(`[tick] Error processing #${state.gameId} (failure ${newCount}):`, error);
 				}
 			}
@@ -1137,9 +1219,18 @@ DM to submit orders:
 DM queries:
 #id possible — See your options
 #id orders — See submitted orders
+#id map — Link to latest map
 
 H=hold, -=move, S=support, C=convoy
 Fleet coasts auto-inferred when unambiguous`;
+
+/** Convert an AT Protocol URI to a Bluesky web URL.
+ *  at://did:plc:xxx/app.bsky.feed.post/rkey → https://bsky.app/profile/did:plc:xxx/post/rkey */
+function atUriToBskyUrl(atUri: string): string {
+	const match = atUri.match(/^at:\/\/([^/]+)\/app\.bsky\.feed\.post\/(.+)$/);
+	if (!match) return atUri; // fallback: return as-is
+	return `https://bsky.app/profile/${match[1]}/post/${match[2]}`;
+}
 
 function formatStandings(state: GameState, centers: Record<string, string[]>): string {
 	return Object.entries(centers)

@@ -55,7 +55,15 @@ export function formatPhase(phase: Phase): string {
 }
 
 /** Order types that players can submit */
-export type OrderType = 'hold' | 'move' | 'support' | 'convoy' | 'retreat' | 'build' | 'disband';
+export type OrderType =
+	| 'hold'
+	| 'move'
+	| 'support'
+	| 'convoy'
+	| 'retreat'
+	| 'build'
+	| 'disband'
+	| 'waive';
 
 /** A parsed order */
 export interface Order {

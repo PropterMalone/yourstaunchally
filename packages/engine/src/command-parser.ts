@@ -35,6 +35,7 @@ export type DmCommand =
 	| { type: 'submit_orders'; gameId: string; orderLines: string[] }
 	| { type: 'show_orders'; gameId: string }
 	| { type: 'show_possible'; gameId: string }
+	| { type: 'show_map'; gameId: string }
 	| { type: 'my_games' }
 	| { type: 'help' }
 	| { type: 'game_menu'; gameId: string }
@@ -147,11 +148,16 @@ export function parseDm(text: string): DmCommand {
 
 	if (
 		lowerRest === 'possible' ||
+		lowerRest.startsWith('possible ') ||
 		lowerRest === 'options' ||
 		lowerRest === 'show possible' ||
 		lowerRest === 'help'
 	) {
 		return { type: 'show_possible', gameId };
+	}
+
+	if (lowerRest === 'map' || lowerRest === 'show map') {
+		return { type: 'show_map', gameId };
 	}
 
 	// Parse as order lines (semicolon, comma, or newline separated)

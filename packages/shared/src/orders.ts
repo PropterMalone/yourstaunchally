@@ -143,6 +143,14 @@ export function parseOrder(raw: string): ParseOrderResult {
 		};
 	}
 
+	// Waive: WAIVE (skip a build)
+	if (trimmed === 'WAIVE') {
+		return {
+			ok: true,
+			order: { raw: 'WAIVE', type: 'waive', unitType: 'A' as UnitType, province: '' },
+		};
+	}
+
 	return { ok: false, error: `Unrecognized order format: "${raw}"` };
 }
 
@@ -197,7 +205,12 @@ export function normalizeOrderString(order: string): string {
 		.toUpperCase()
 		.replace(/\s+/g, ' ')
 		// Strip accidental leading game ID: "#UETPUE A PAR H" → "A PAR H"
-		.replace(/^#[A-Z0-9]{4,8}\s+/, '')
+		.replace(/^#[A-Z0-9]{4,8}\s+/, '');
+
+	// "WAIVE BRE" or "BRE WAIVE" → "WAIVE"
+	if (/^WAIVE\b/.test(normalized) || /\bWAIVE$/.test(normalized)) return 'WAIVE';
+
+	normalized = normalized
 		.replace(/\s*-\s*/g, ' - ')
 		.replace(/\(VIA CONVOY\)/, 'VIA')
 		// Strip trailing H from support-hold: "A MAR S A PAR H" → "A MAR S A PAR"

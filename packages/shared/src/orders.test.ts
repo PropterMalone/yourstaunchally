@@ -128,6 +128,18 @@ describe('parseOrder', () => {
 		});
 	});
 
+	it('parses WAIVE', () => {
+		const result = parseOrder('WAIVE');
+		expect(result).toEqual({
+			ok: true,
+			order: { raw: 'WAIVE', type: 'waive', unitType: 'A', province: '' },
+		});
+	});
+
+	it('parses lowercase waive', () => {
+		expect(parseOrder('waive').ok).toBe(true);
+	});
+
 	it('handles lowercase input', () => {
 		const result = parseOrder('a par - bur');
 		expect(result).toEqual({
@@ -245,6 +257,19 @@ describe('normalizeOrderString', () => {
 
 	it('strips accidental leading game ID', () => {
 		expect(normalizeOrderString('#uetpue A WAR H')).toBe('A WAR H');
+	});
+
+	it('normalizes WAIVE with trailing province', () => {
+		expect(normalizeOrderString('WAIVE BRE')).toBe('WAIVE');
+		expect(normalizeOrderString('waive bre')).toBe('WAIVE');
+	});
+
+	it('normalizes province-first WAIVE', () => {
+		expect(normalizeOrderString('BRE WAIVE')).toBe('WAIVE');
+	});
+
+	it('normalizes bare WAIVE', () => {
+		expect(normalizeOrderString('WAIVE')).toBe('WAIVE');
 	});
 });
 

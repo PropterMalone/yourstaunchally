@@ -10,12 +10,14 @@ export async function svgToPng(svg: string): Promise<Buffer> {
 	return sharp(Buffer.from(svg)).png().toBuffer();
 }
 
-/** Post a message with an embedded map image from SVG */
+/** Post a message with an embedded map image from SVG.
+ *  If `reply` is provided, posts as a reply instead of a top-level post. */
 export async function postWithMapSvg(
 	agent: AtpAgent,
 	text: string,
 	svg: string,
 	altText: string,
+	reply?: { parentUri: string; parentCid: string; rootUri: string; rootCid: string },
 ): Promise<{ uri: string; cid: string }> {
 	const png = await svgToPng(svg);
 
@@ -42,6 +44,12 @@ export async function postWithMapSvg(
 			],
 		},
 	};
+	if (reply) {
+		record['reply'] = {
+			parent: { uri: reply.parentUri, cid: reply.parentCid },
+			root: { uri: reply.rootUri, cid: reply.rootCid },
+		};
+	}
 
 	const response = await agent.post(record);
 	return { uri: response.uri, cid: response.cid };

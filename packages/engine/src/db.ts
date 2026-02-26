@@ -40,6 +40,9 @@ export interface GameDb {
 	/** Get the most recent post for a game (for quote-threading) */
 	getLatestGamePost(gameId: string): { uri: string; cid: string } | null;
 
+	/** Get the most recent phase/game_start post for a game (these have maps) */
+	getLatestMapPost(gameId: string): { uri: string; cid: string } | null;
+
 	/** Close the database */
 	close(): void;
 }
@@ -157,6 +160,15 @@ export function createDb(config: DbConfig): GameDb {
 			const row = db
 				.prepare(
 					"SELECT uri, cid FROM game_posts WHERE game_id = ? AND cid != '' ORDER BY indexed_at DESC LIMIT 1",
+				)
+				.get(gameId) as { uri: string; cid: string } | undefined;
+			return row ?? null;
+		},
+
+		getLatestMapPost(gameId: string): { uri: string; cid: string } | null {
+			const row = db
+				.prepare(
+					"SELECT uri, cid FROM game_posts WHERE game_id = ? AND kind IN ('phase', 'game_start', 'game_over') ORDER BY indexed_at DESC LIMIT 1",
 				)
 				.get(gameId) as { uri: string; cid: string } | undefined;
 			return row ?? null;

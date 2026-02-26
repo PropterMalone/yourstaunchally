@@ -9,9 +9,9 @@ const BLUESKY_MAX_GRAPHEMES = 300;
 
 // Rate limiter: max posts per sliding window.
 // Prevents burst posting that triggers Bluesky spam detection.
-// Conservative for new account — loosen once established.
+// Conservative for new account — titrate up once established.
 const POST_WINDOW_MS = 60_000;
-const MAX_POSTS_PER_WINDOW = 2;
+const MAX_POSTS_PER_WINDOW = 1;
 const postTimestamps: number[] = [];
 
 async function rateLimitedPost<T>(fn: () => Promise<T>): Promise<T> {
