@@ -207,7 +207,8 @@ export function normalizeOrderString(order: string): string {
 		// Strip accidental leading game ID: "#UETPUE A PAR H" → "A PAR H"
 		.replace(/^#[A-Z0-9]{4,8}\s+/, '');
 
-	// "WAIVE BRE" or "BRE WAIVE" → "WAIVE"
+	// "WAIVE BRE", "BRE WAIVE", "WAIVE 2" → "WAIVE"
+	// Note: "WAIVE N" count expansion is handled by expandWaives(), not here.
 	if (/^WAIVE\b/.test(normalized) || /\bWAIVE$/.test(normalized)) return 'WAIVE';
 
 	normalized = normalized
@@ -228,4 +229,21 @@ export function normalizeOrderString(order: string): string {
 	}
 
 	return normalized;
+}
+
+/**
+ * Expand "WAIVE N" shorthand into N separate WAIVE orders.
+ * Call on raw order lines (before or after normalizeOrderString).
+ * e.g. ["F MAR B", "WAIVE 2"] → ["F MAR B", "WAIVE", "WAIVE"]
+ */
+export function expandWaives(orderLines: string[]): string[] {
+	return orderLines.flatMap((line) => {
+		const upper = line.trim().toUpperCase();
+		const match = upper.match(/^WAIVE\s+(\d+)$/);
+		if (match) {
+			const count = Math.min(Number(match[1]), 20); // cap at 20 to prevent abuse
+			return Array.from({ length: count }, () => 'WAIVE');
+		}
+		return [line];
+	});
 }

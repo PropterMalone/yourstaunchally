@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { inferCoast, normalizeOrderString, parseOrder, parseOrders } from './orders.js';
+import {
+	expandWaives,
+	inferCoast,
+	normalizeOrderString,
+	parseOrder,
+	parseOrders,
+} from './orders.js';
 
 describe('parseOrder', () => {
 	it('parses hold orders', () => {
@@ -270,6 +276,32 @@ describe('normalizeOrderString', () => {
 
 	it('normalizes bare WAIVE', () => {
 		expect(normalizeOrderString('WAIVE')).toBe('WAIVE');
+	});
+
+	it('normalizes "WAIVE 2" to WAIVE (count handled by expandWaives)', () => {
+		expect(normalizeOrderString('WAIVE 2')).toBe('WAIVE');
+	});
+});
+
+describe('expandWaives', () => {
+	it('expands WAIVE N into N separate WAIVEs', () => {
+		expect(expandWaives(['F MAR B', 'WAIVE 2'])).toEqual(['F MAR B', 'WAIVE', 'WAIVE']);
+	});
+
+	it('passes through bare WAIVE unchanged', () => {
+		expect(expandWaives(['WAIVE'])).toEqual(['WAIVE']);
+	});
+
+	it('passes through non-WAIVE orders unchanged', () => {
+		expect(expandWaives(['A PAR - BUR', 'F BRE - MAO'])).toEqual(['A PAR - BUR', 'F BRE - MAO']);
+	});
+
+	it('handles WAIVE 1 as single WAIVE', () => {
+		expect(expandWaives(['WAIVE 1'])).toEqual(['WAIVE']);
+	});
+
+	it('is case-insensitive', () => {
+		expect(expandWaives(['waive 3'])).toEqual(['WAIVE', 'WAIVE', 'WAIVE']);
 	});
 });
 
