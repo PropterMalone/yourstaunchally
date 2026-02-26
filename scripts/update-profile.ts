@@ -25,7 +25,7 @@ async function main() {
 		rkey: 'self',
 		record: {
 			...existing,
-			displayName: 'YourStaunchAlly',
+			displayName: 'YourStalwartAlly',
 			description: `Diplomacy bot for Bluesky. 7 powers, 1 map, 0 trust.
 
 Mention me with "new game" to start. Orders via DM.

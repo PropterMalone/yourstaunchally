@@ -18,10 +18,20 @@ const POLL_INTERVAL = 5000;
 const MAX_WAIT = 180_000; // 3 min — more bot work per poll cycle with 3 games
 const GAME_CREATION_STAGGER_MS = 3000; // stagger to avoid mention polling race
 
+/**
+ * Reads test accounts from scripts/accounts.json (gitignored).
+ * Expects at least 3 accounts — uses first 3 as bobby/jack/rikki.
+ */
+import { readFileSync } from 'node:fs';
+const allAccounts = JSON.parse(readFileSync(new URL('./accounts.json', import.meta.url), 'utf8'));
+if (allAccounts.length < 3) {
+	console.error('Need at least 3 accounts in scripts/accounts.json');
+	process.exit(1);
+}
 const ACCOUNTS = {
-	bobby: { identifier: 'bobbyquine.bsky.social', password: '24f5-rs2m-3xjo-p4gq' },
-	jack: { identifier: 'jackautomatic.bsky.social', password: 'vbh_gdw*qtc6RTE0jdg' },
-	rikki: { identifier: 'rikkiwildside.bsky.social', password: 'EYC2qew-zha4evb5umg' },
+	bobby: { identifier: allAccounts[0].handle ?? allAccounts[0].identifier, password: allAccounts[0].password },
+	jack: { identifier: allAccounts[1].handle ?? allAccounts[1].identifier, password: allAccounts[1].password },
+	rikki: { identifier: allAccounts[2].handle ?? allAccounts[2].identifier, password: allAccounts[2].password },
 };
 
 const STANDARD_ORDERS = {

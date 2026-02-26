@@ -7,8 +7,12 @@
 import { AtpAgent, RichText } from '@atproto/api';
 
 const BOT_HANDLE = 'yourstaunchally.bsky.social';
-const TEST_IDENTIFIER = 'bobbyquine.bsky.social';
-const TEST_PASSWORD = '24f5-rs2m-3xjo-p4gq';
+const TEST_IDENTIFIER = process.env.TEST_BSKY_IDENTIFIER ?? 'bobbyquine.bsky.social';
+const TEST_PASSWORD = process.env.TEST_BSKY_PASSWORD;
+if (!TEST_PASSWORD) {
+	console.error('set TEST_BSKY_PASSWORD (and optionally TEST_BSKY_IDENTIFIER)');
+	process.exit(1);
+}
 
 const command = process.argv[2] ?? 'new game';
 const text = `@${BOT_HANDLE} ${command}`;
