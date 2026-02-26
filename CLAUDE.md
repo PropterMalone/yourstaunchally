@@ -96,6 +96,10 @@ LABELER_SECRET=     # Shared secret for labeler API
 OLLAMA_URL=         # Ollama endpoint for LLM personas (optional)
 ```
 
+## FAQ
+
+`packages/feed/src/faq.ts` — static HTML served at `/faq` by the feed generator. Keep this in sync with actual bot behavior when adding/changing commands, order syntax, or game flow. The FAQ is linked from the bot's Bluesky bio.
+
 ## Gotchas
 
 - Python diplomacy lib is abandoned (last commit 2020) but works on Python 3.12
