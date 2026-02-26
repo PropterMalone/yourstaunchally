@@ -31,37 +31,32 @@ POWERS_RE = r"austria|england|france|germany|italy|russia|turkey"
 
 
 def strip_non_sc_coloring(svg, centers):
-    """Remove colored overlays for non-supply-center provinces.
+    """Replace power coloring with neutral fill for non-supply-center provinces.
 
     The diplomacy library colors every province a power has ever influenced.
-    We only want supply centers colored. The SVG structure is:
-      <path id="_xxx" .../>\n        <path class="france" .../>
-    We remove the overlay <path> when _xxx is not a current SC.
+    We only want supply centers colored. Each colored province is a single
+    <path class="france" d="..." id="_xxx"/> element. For non-SC provinces
+    we swap the power class for "nopower" (antiquewhite fill, defined in the
+    SVG stylesheet).
     """
     all_scs = set()
     for power_centers in centers.values():
         all_scs.update(c.upper()[:3] for c in power_centers)
 
-    def should_keep(match):
-        preceding = svg[max(0, match.start() - 500):match.start()]
-        id_matches = list(re.finditer(r'id="(_[a-z_]+)"', preceding))
-        if not id_matches:
-            return True  # can't determine province, keep it
-        province = id_matches[-1].group(1).lstrip("_").upper()[:3]
-        return province in all_scs
+    def replace_match(match):
+        path_text = match.group(0)
+        id_match = re.search(r'id="(_[a-z_]+)"', path_text)
+        if not id_match:
+            return path_text  # can't determine province, keep it
+        province = id_match.group(1).lstrip("_").upper()[:3]
+        if province in all_scs:
+            return path_text  # supply center, keep coloring
+        # Non-SC: swap power class for neutral "nopower"
+        return re.sub(r'class="(?:' + POWERS_RE + r')"', 'class="nopower"', path_text)
 
-    # Match colored overlay paths (power class, self-closing)
+    # Match colored province paths (have power class, self-closing)
     pattern = re.compile(r'\s*<path\s+class="(?:' + POWERS_RE + r')"[^/]*/>')
-    parts = []
-    last_end = 0
-    for m in pattern.finditer(svg):
-        if should_keep(m):
-            parts.append(svg[last_end:m.end()])
-        else:
-            parts.append(svg[last_end:m.start()])
-        last_end = m.end()
-    parts.append(svg[last_end:])
-    return "".join(parts)
+    return pattern.sub(replace_match, svg)
 
 
 def new_game():

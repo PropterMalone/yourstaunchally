@@ -99,6 +99,10 @@ export const FAQ_HTML = `<!DOCTYPE html>
   <tr><td>Support</td><td><code>UNIT S UNIT - DEST</code></td><td><code>A MAR S A PAR - BUR</code></td></tr>
   <tr><td>Support hold</td><td><code>UNIT S UNIT</code></td><td><code>F GOL S A MAR</code></td></tr>
   <tr><td>Convoy</td><td><code>F SEA C A FROM - TO</code></td><td><code>F MAO C A BRE - SPA</code></td></tr>
+  <tr><td>Retreat</td><td><code>UNIT R DEST</code></td><td><code>A BUR R PAR</code></td></tr>
+  <tr><td>Disband</td><td><code>UNIT D</code></td><td><code>A BUR D</code></td></tr>
+  <tr><td>Build</td><td><code>BUILD UNIT LOC</code></td><td><code>BUILD F LON</code></td></tr>
+  <tr><td>Waive</td><td><code>WAIVE</code> or <code>WAIVE N</code></td><td><code>WAIVE 2</code> (skip 2 builds)</td></tr>
 </table>
 <p>Separate multiple orders with semicolons, commas, or newlines. Prefix every order with the game ID.</p>
 <p><strong>Partial updates:</strong> You can update orders for specific units without resubmitting everything. Send just the orders you want to change — existing orders for other units are kept. After each submission, the bot confirms your full current order set.</p>
