@@ -22,9 +22,46 @@ Output format:
 """
 
 import json
+import re
 import sys
 from diplomacy import Game
 from diplomacy.utils.export import to_saved_game_format, from_saved_game_format
+
+POWERS_RE = r"austria|england|france|germany|italy|russia|turkey"
+
+
+def strip_non_sc_coloring(svg, centers):
+    """Remove colored overlays for non-supply-center provinces.
+
+    The diplomacy library colors every province a power has ever influenced.
+    We only want supply centers colored. The SVG structure is:
+      <path id="_xxx" .../>\n        <path class="france" .../>
+    We remove the overlay <path> when _xxx is not a current SC.
+    """
+    all_scs = set()
+    for power_centers in centers.values():
+        all_scs.update(c.upper()[:3] for c in power_centers)
+
+    def should_keep(match):
+        preceding = svg[max(0, match.start() - 500):match.start()]
+        id_matches = list(re.finditer(r'id="(_[a-z_]+)"', preceding))
+        if not id_matches:
+            return True  # can't determine province, keep it
+        province = id_matches[-1].group(1).lstrip("_").upper()[:3]
+        return province in all_scs
+
+    # Match colored overlay paths (power class, self-closing)
+    pattern = re.compile(r'\s*<path\s+class="(?:' + POWERS_RE + r')"[^/]*/>')
+    parts = []
+    last_end = 0
+    for m in pattern.finditer(svg):
+        if should_keep(m):
+            parts.append(svg[last_end:m.end()])
+        else:
+            parts.append(svg[last_end:m.start()])
+        last_end = m.end()
+    parts.append(svg[last_end:])
+    return "".join(parts)
 
 
 def new_game():
@@ -83,7 +120,8 @@ def set_orders_and_process(game, orders, render=False):
         }
 
     if render:
-        result["svg"] = game.render(incl_abbrev=True)
+        svg = game.render(incl_abbrev=True)
+        result["svg"] = strip_non_sc_coloring(svg, result["centers"])
 
     return result
 
@@ -109,8 +147,10 @@ def get_possible_orders(game):
 
 def render_map(game):
     """Render the current game state as SVG."""
+    svg = game.render(incl_abbrev=True)
+    centers = {name: game.get_centers(name) for name in game.get_map_power_names()}
     return {
-        "svg": game.render(incl_abbrev=True),
+        "svg": strip_non_sc_coloring(svg, centers),
         "phase": game.get_current_phase(),
     }
 
