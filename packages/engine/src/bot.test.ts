@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { graphemeLength, splitIntoPosts, truncateToLimit } from './bot.js';
+import { graphemeLength, splitForPost, truncateToLimit } from './bot.js';
 
 describe('graphemeLength', () => {
 	it('counts ASCII correctly', () => {
@@ -31,29 +31,20 @@ describe('truncateToLimit', () => {
 	});
 });
 
-describe('splitIntoPosts', () => {
+describe('splitForPost', () => {
 	it('returns single-element array for short text', () => {
-		expect(splitIntoPosts('hello')).toEqual(['hello']);
+		expect(splitForPost('hello')).toEqual(['hello']);
 	});
 
 	it('splits long text at line boundaries', () => {
 		const lines = Array.from({ length: 20 }, (_, i) => `Line ${i + 1}: some content here`);
 		const text = lines.join('\n');
-		const chunks = splitIntoPosts(text);
+		const chunks = splitForPost(text);
 
 		expect(chunks.length).toBeGreaterThan(1);
 		for (const chunk of chunks) {
 			expect(graphemeLength(chunk)).toBeLessThanOrEqual(300);
 		}
-	});
-
-	it('adds [n/total] suffix to split posts', () => {
-		const text = `${'a'.repeat(150)}\n${'b'.repeat(150)}\n${'c'.repeat(150)}`;
-		const chunks = splitIntoPosts(text);
-
-		expect(chunks.length).toBeGreaterThan(1);
-		expect(chunks[0]).toMatch(/\[1\/\d+\]$/);
-		expect(chunks[chunks.length - 1]).toMatch(/\[\d+\/\d+\]$/);
 	});
 
 	it('handles the game start announcement format', () => {
@@ -71,7 +62,7 @@ describe('splitIntoPosts', () => {
 			'Deadline: 1d 23h remaining',
 		].join('\n');
 
-		const chunks = splitIntoPosts(text);
+		const chunks = splitForPost(text);
 		for (const chunk of chunks) {
 			expect(graphemeLength(chunk)).toBeLessThanOrEqual(300);
 		}
@@ -104,7 +95,7 @@ DM queries:
 
 H=hold, -=move, S=support, C=convoy`;
 
-		const chunks = splitIntoPosts(helpText);
+		const chunks = splitForPost(helpText);
 		expect(chunks.length).toBeGreaterThan(1);
 		for (const chunk of chunks) {
 			expect(graphemeLength(chunk)).toBeLessThanOrEqual(300);
@@ -113,7 +104,7 @@ H=hold, -=move, S=support, C=convoy`;
 
 	it('splits very long single line on spaces', () => {
 		const text = Array.from({ length: 100 }, () => 'word').join(' ');
-		const chunks = splitIntoPosts(text);
+		const chunks = splitForPost(text);
 
 		expect(chunks.length).toBeGreaterThan(1);
 		for (const chunk of chunks) {
@@ -123,8 +114,8 @@ H=hold, -=move, S=support, C=convoy`;
 
 	it('preserves text content across splits', () => {
 		const text = `Line A\nLine B\nLine C\n${'x'.repeat(280)}`;
-		const chunks = splitIntoPosts(text);
-		const recombined = chunks.map((c) => c.replace(/ \[\d+\/\d+\]$/, '')).join('\n');
+		const chunks = splitForPost(text);
+		const recombined = chunks.join('\n');
 		expect(recombined).toContain('Line A');
 		expect(recombined).toContain('Line B');
 		expect(recombined).toContain('Line C');

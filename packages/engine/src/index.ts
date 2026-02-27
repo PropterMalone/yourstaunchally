@@ -8,16 +8,17 @@
  * - Timeout wrapping on all API calls
  * - Heartbeat logging every 10 polls
  */
-import { createAgent, pollMentions } from './bot.js';
-import { createDb } from './db.js';
 import {
+	createAgent,
 	createBlueskyDmSender,
 	createChatAgent,
 	createConsoleDmSender,
+	createLabelerClient,
 	pollInboundDms,
-} from './dm.js';
+	pollMentions,
+} from './bot.js';
+import { createDb } from './db.js';
 import { createGameManager } from './game-manager.js';
-import { createLabelerClient } from './labeler-client.js';
 import { createLlmClient } from './llm.js';
 
 const POLL_INTERVAL_MS = 15_000; // 15 seconds

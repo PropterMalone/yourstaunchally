@@ -31,15 +31,8 @@ import {
 	voteDraw,
 } from '@yourstaunchally/shared';
 import { newGame, renderMap, setOrdersAndProcess } from './adjudicator.js';
-import type { MentionNotification } from './bot.js';
-import {
-	postMessage,
-	postThread,
-	postWithQuote,
-	replyThread,
-	replyToPost,
-	splitIntoPosts,
-} from './bot.js';
+import type { DmSender, InboundDm, MentionNotification, PostRef } from './bot.js';
+import { postMessage, postWithQuote, replyToPost, splitForPost } from './bot.js';
 import { type DmCommand, type MentionCommand, parseDm, parseMention } from './command-parser.js';
 import {
 	allOrdersInCommentary,
@@ -55,7 +48,6 @@ import {
 	soloVictoryCommentary,
 } from './commentary.js';
 import type { GameDb } from './db.js';
-import type { DmSender, InboundDm } from './dm.js';
 import type { LabelerClient } from './labeler-client.js';
 import type { LlmClient } from './llm.js';
 import { postWithMapSvg } from './map-renderer.js';
@@ -136,14 +128,8 @@ export function createGameManager(deps: GameManagerDeps) {
 			`[mention] @${notification.authorHandle}: "${notification.text}" → ${command.type}`,
 		);
 		const reply = async (text: string) => {
-			await replyThread(
-				agent,
-				text,
-				notification.uri,
-				notification.cid,
-				notification.uri,
-				notification.cid,
-			);
+			const parent: PostRef = { uri: notification.uri, cid: notification.cid };
+			await replyToPost(agent, text, parent, parent);
 		};
 
 		switch (command.type) {
@@ -342,7 +328,7 @@ export function createGameManager(deps: GameManagerDeps) {
 			);
 		} catch (error) {
 			console.warn(`[map] Failed to render start map: ${error}`);
-			startPost = await postThread(agent, startMsg);
+			startPost = await postMessage(agent, startMsg);
 		}
 		recordAndLabel(
 			startPost.uri,
@@ -449,7 +435,7 @@ export function createGameManager(deps: GameManagerDeps) {
 			const standings = result.state.lastCenters
 				? `\n\n${formatStandings(result.state, result.state.lastCenters)}`
 				: '';
-			const drawPost = await postThread(
+			const drawPost = await postMessage(
 				agent,
 				`🤝 Game #${command.gameId} ends in a draw!${standings}`,
 			);
@@ -695,8 +681,8 @@ export function createGameManager(deps: GameManagerDeps) {
 				const graceMsg = `⏰ Game #${command.gameId} — all orders are in! ${allOrdersInCommentary()}\n\nAdjudication in 20 minutes. You may revise orders until then.`;
 				const prev = db.getLatestGamePost(command.gameId);
 				const gracePost = prev
-					? await postWithQuote(agent, graceMsg, prev.uri, prev.cid)
-					: await postThread(agent, graceMsg);
+					? await postWithQuote(agent, graceMsg, prev)
+					: await postMessage(agent, graceMsg);
 				recordAndLabel(
 					gracePost.uri,
 					gracePost.cid,
@@ -924,17 +910,10 @@ export function createGameManager(deps: GameManagerDeps) {
 			}
 
 			const text = `${power} (${handle})\n\n${orderLines.join('\n')}`;
-			const chunks = splitIntoPosts(text);
+			const chunks = splitForPost(text);
 
 			for (const chunk of chunks) {
-				const reply = await replyToPost(
-					agent,
-					chunk,
-					parent.uri,
-					parent.cid,
-					rootPost.uri,
-					rootPost.cid,
-				);
+				const reply = await replyToPost(agent, chunk, parent, rootPost);
 				recordAndLabel(reply.uri, reply.cid, state.gameId, botDid, 'orders', state.currentPhase);
 				parent = reply;
 			}
@@ -1061,7 +1040,7 @@ export function createGameManager(deps: GameManagerDeps) {
 
 			// Build full phase message, then split across posts (first post gets the map)
 			const fullMsg = `📜 Game #${state.gameId}: ${seasonName} ${phase.year} ${phaseTypeName}\n\n${phaseCommentary(phase.type)}\n\n${formatCenterCounts(adjResult.centers)}${extrasBlock}\n\nDeadline: ${deadlineDisplay}`;
-			const phaseChunks = splitIntoPosts(fullMsg);
+			const phaseChunks = splitForPost(fullMsg);
 
 			// Ensure we have a map — adjudicator should return one, but render explicitly if missing
 			const mapSvg = (adjResult.svg ??
@@ -1076,14 +1055,7 @@ export function createGameManager(deps: GameManagerDeps) {
 			for (let i = 1; i < phaseChunks.length; i++) {
 				try {
 					const chunk = phaseChunks[i] as string;
-					const reply = await replyToPost(
-						agent,
-						chunk,
-						orderReplyParent.uri,
-						orderReplyParent.cid,
-						phasePost.uri,
-						phasePost.cid,
-					);
+					const reply = await replyToPost(agent, chunk, orderReplyParent, phasePost);
 					recordAndLabel(reply.uri, reply.cid, state.gameId, botDid, 'phase', adjResult.phase);
 					orderReplyParent = reply;
 				} catch (error) {
@@ -1155,8 +1127,8 @@ export function createGameManager(deps: GameManagerDeps) {
 		try {
 			const prevPost = db.getLatestGamePost(state.gameId);
 			const statusPost = prevPost
-				? await postWithQuote(agent, statusMsg, prevPost.uri, prevPost.cid)
-				: await postThread(agent, statusMsg);
+				? await postWithQuote(agent, statusMsg, prevPost)
+				: await postMessage(agent, statusMsg);
 			recordAndLabel(
 				statusPost.uri,
 				statusPost.cid,
