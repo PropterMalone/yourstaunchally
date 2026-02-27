@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@atproto/api": "^0.13.0",
+    "propter-bsky-kit": "file:../../../propter-bsky-kit",
     "@yourstaunchally/shared": "*",
     "better-sqlite3": "^11.0.0",
     "sharp": "^0.34.5"
