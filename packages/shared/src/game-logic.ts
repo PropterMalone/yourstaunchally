@@ -208,6 +208,21 @@ export function submitOrders(
 	};
 }
 
+/** Cancel all orders for a power, returning them to "not submitted" state */
+export function cancelOrders(
+	state: GameState,
+	power: Power,
+): { ok: true; state: GameState } | { ok: false; error: string } {
+	if (state.status !== 'active') {
+		return { ok: false, error: 'Game is not active' };
+	}
+	if (!state.currentOrders[power]) {
+		return { ok: false, error: 'No orders to cancel' };
+	}
+	const { [power]: _, ...rest } = state.currentOrders;
+	return { ok: true, state: { ...state, currentOrders: rest } };
+}
+
 /** Get powers that haven't submitted orders yet */
 export function getPendingPowers(state: GameState): Power[] {
 	const assignedPowers = state.players.map((p) => p.power).filter((p): p is Power => p !== null);

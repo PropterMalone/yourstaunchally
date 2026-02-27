@@ -88,6 +88,7 @@ export const FAQ_HTML = `<!DOCTYPE html>
   <li><code>#id A PAR - BUR; F BRE - MAO; A MAR S A PAR - BUR</code> — Submit orders</li>
   <li><code>#id possible</code> — See all legal orders for your units</li>
   <li><code>#id orders</code> — Review your submitted orders</li>
+  <li><code>#id cancel</code> — Cancel all submitted orders</li>
   <li><code>my games</code> — List your active games with order status</li>
 </ul>
 
