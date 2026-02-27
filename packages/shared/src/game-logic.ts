@@ -5,6 +5,7 @@
  * Phase cycle: S1901M → (S1901R) → F1901M → (F1901R) → W1901A → S1902M → ...
  * Retreat/adjustment phases are skipped if not needed (handled by diplomacy lib).
  */
+import { parseOrder } from './orders.js';
 import type { DrawVote, GameConfig, GameState, PhaseOrders, Player, Power } from './types.js';
 import { DEFAULT_GAME_CONFIG, POWERS, SOLO_VICTORY_CENTERS } from './types.js';
 
@@ -179,7 +180,8 @@ export function submitOrders(
 	// Unit location = first two tokens (e.g. "A PAR" from "A PAR - BUR").
 	// WAIVE is special: multiple WAIVEs are distinct (one per skipped build), so if the new
 	// submission includes any WAIVEs, all existing WAIVEs are replaced wholesale.
-	const existing = state.currentOrders[power]?.orders ?? [];
+	// Defensive: filter existing orders through parseOrder to purge any corrupted entries.
+	const existing = (state.currentOrders[power]?.orders ?? []).filter((o) => parseOrder(o).ok);
 	const newUnitKeys = new Set(
 		orders.filter((o) => o !== 'WAIVE').map((o) => o.split(/\s+/).slice(0, 2).join(' ')),
 	);
