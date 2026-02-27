@@ -36,6 +36,7 @@ export type DmCommand =
 	| { type: 'show_orders'; gameId: string }
 	| { type: 'show_possible'; gameId: string }
 	| { type: 'show_map'; gameId: string }
+	| { type: 'cancel_orders'; gameId: string }
 	| { type: 'my_games' }
 	| { type: 'help' }
 	| { type: 'game_menu'; gameId: string }
@@ -158,6 +159,10 @@ export function parseDm(text: string): DmCommand {
 
 	if (lowerRest === 'map' || lowerRest === 'show map') {
 		return { type: 'show_map', gameId };
+	}
+
+	if (lowerRest === 'cancel' || lowerRest === 'clear' || lowerRest === 'cancel all') {
+		return { type: 'cancel_orders', gameId };
 	}
 
 	// Parse as order lines (semicolon, comma, or newline separated)

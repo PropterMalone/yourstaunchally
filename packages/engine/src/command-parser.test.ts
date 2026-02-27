@@ -184,6 +184,18 @@ describe('parseDm', () => {
 		expect(parseDm('#abc123 show map')).toEqual({ type: 'show_map', gameId: 'abc123' });
 	});
 
+	it('parses "cancel" as cancel_orders', () => {
+		expect(parseDm('#abc123 cancel')).toEqual({ type: 'cancel_orders', gameId: 'abc123' });
+	});
+
+	it('parses "clear" as cancel_orders', () => {
+		expect(parseDm('#abc123 clear')).toEqual({ type: 'cancel_orders', gameId: 'abc123' });
+	});
+
+	it('parses "cancel all" as cancel_orders', () => {
+		expect(parseDm('#abc123 cancel all')).toEqual({ type: 'cancel_orders', gameId: 'abc123' });
+	});
+
 	it('parses "possible moves" as show_possible (not order submission)', () => {
 		expect(parseDm('#abc123 possible moves')).toEqual({ type: 'show_possible', gameId: 'abc123' });
 	});

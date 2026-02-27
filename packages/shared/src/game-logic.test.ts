@@ -4,6 +4,7 @@ import {
 	addPlayer,
 	advancePhase,
 	allOrdersSubmitted,
+	cancelOrders,
 	checkSoloVictory,
 	claimPower,
 	createGame,
@@ -408,6 +409,35 @@ describe('player/power lookups', () => {
 	it('getPowerForPlayer returns null for non-player', () => {
 		const game = activeGame();
 		expect(getPowerForPlayer(game, 'did:plc:nonexistent')).toBeNull();
+	});
+});
+
+describe('cancelOrders', () => {
+	it('clears all orders for a power', () => {
+		const game = activeGame();
+		const r1 = submitOrders(game, 'AUSTRIA', ['A BUD H', 'A VIE H', 'F TRI H']);
+		expect(r1.ok).toBe(true);
+		if (!r1.ok) return;
+		expect(r1.state.currentOrders['AUSTRIA']).toBeDefined();
+
+		const r2 = cancelOrders(r1.state, 'AUSTRIA');
+		expect(r2.ok).toBe(true);
+		if (!r2.ok) return;
+		expect(r2.state.currentOrders['AUSTRIA']).toBeUndefined();
+	});
+
+	it('returns error when no orders to cancel', () => {
+		const game = activeGame();
+		const r = cancelOrders(game, 'AUSTRIA');
+		expect(r.ok).toBe(false);
+		if (r.ok) return;
+		expect(r.error).toBe('No orders to cancel');
+	});
+
+	it('returns error for inactive game', () => {
+		const game = createGame('test');
+		const r = cancelOrders(game, 'AUSTRIA');
+		expect(r.ok).toBe(false);
 	});
 });
 

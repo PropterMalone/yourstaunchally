@@ -11,6 +11,7 @@ import {
 	addPlayer,
 	advancePhase,
 	allOrdersSubmitted,
+	cancelOrders,
 	checkSoloVictory,
 	claimPower,
 	createGame,
@@ -557,13 +558,16 @@ export function createGameManager(deps: GameManagerDeps) {
 			case 'show_map':
 				await handleShowMap(command, dm);
 				break;
+			case 'cancel_orders':
+				await handleCancelOrders(command, dm);
+				break;
 			case 'my_games':
 				await handleMyGames(dm);
 				break;
 			case 'help':
 				await dmSender.sendDm(
 					dm.senderDid,
-					'DM commands:\n\n#gameId A PAR - BUR; F BRE - MAO \u2014 Submit orders\n#gameId possible \u2014 See legal orders\n#gameId orders \u2014 Review submitted orders\nmy games \u2014 List your active games\n\nSeparate orders with semicolons, commas, or newlines. All deadlines are UTC.',
+					'DM commands:\n\n#gameId A PAR - BUR; F BRE - MAO \u2014 Submit orders\n#gameId possible \u2014 See legal orders\n#gameId orders \u2014 Review submitted orders\n#gameId cancel \u2014 Cancel all orders\nmy games \u2014 List your active games\n\nSeparate orders with semicolons, commas, or newlines. All deadlines are UTC.',
 				);
 				break;
 			case 'game_menu':
@@ -740,6 +744,36 @@ export function createGameManager(deps: GameManagerDeps) {
 		await dmSender.sendDm(
 			dm.senderDid,
 			`Current orders for ${power}:\n${phaseOrders.orders.join('\n')}`,
+		);
+	}
+
+	async function handleCancelOrders(
+		command: DmCommand & { type: 'cancel_orders' },
+		dm: InboundDm,
+	): Promise<void> {
+		const state = db.loadGame(command.gameId);
+		if (!state) {
+			await dmSender.sendDm(dm.senderDid, `Game #${command.gameId} not found.`);
+			return;
+		}
+
+		const power = getPowerForPlayer(state, dm.senderDid);
+		if (!power) {
+			await dmSender.sendDm(dm.senderDid, 'You are not playing in this game.');
+			return;
+		}
+
+		const result = cancelOrders(state, power);
+		if (!result.ok) {
+			await dmSender.sendDm(dm.senderDid, result.error);
+			return;
+		}
+
+		db.saveGame(result.state);
+		console.log(`[orders] #${command.gameId} ${power}: all orders cancelled`);
+		await dmSender.sendDm(
+			dm.senderDid,
+			`All orders for ${power} in #${command.gameId} have been cancelled. Your units will hold.\n\nDM "#${command.gameId} possible" to see your options.`,
 		);
 	}
 
