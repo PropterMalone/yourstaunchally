@@ -17,6 +17,11 @@ RUN python3 -m venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH"
 RUN pip install --no-cache-dir diplomacy
 
+# Copy local dependency: propter-bsky-kit
+# packages/engine/package.json references file:../../../propter-bsky-kit
+# From /app/packages/engine/ that resolves to /propter-bsky-kit
+COPY .docker/propter-bsky-kit/ /propter-bsky-kit/
+
 # Install Node dependencies (no --ignore-scripts: better-sqlite3 needs native build)
 COPY package.json package-lock.json ./
 COPY packages/shared/package.json packages/shared/
@@ -50,6 +55,9 @@ ENV PYTHON_PATH="/app/.venv/bin/python3"
 
 # Copy Node modules (includes compiled native addons) and built code
 COPY --from=base /app/node_modules node_modules/
+# Replace propter-bsky-kit symlink with actual files (symlink target is outside /app)
+RUN rm -f node_modules/propter-bsky-kit
+COPY --from=base /propter-bsky-kit node_modules/propter-bsky-kit/
 COPY --from=base /app/packages/shared/dist packages/shared/dist/
 COPY --from=base /app/packages/shared/package.json packages/shared/
 COPY --from=base /app/packages/engine/dist packages/engine/dist/

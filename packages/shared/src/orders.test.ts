@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	convertMovesToRetreats,
 	expandWaives,
 	inferCoast,
 	normalizeOrderString,
@@ -131,6 +132,28 @@ describe('parseOrder', () => {
 		expect(result).toEqual({
 			ok: true,
 			order: { raw: 'A MUN D', type: 'disband', unitType: 'A', province: 'MUN' },
+		});
+	});
+
+	it('parses retreat', () => {
+		const result = parseOrder('F HOL R HEL');
+		expect(result).toEqual({
+			ok: true,
+			order: { raw: 'F HOL R HEL', type: 'retreat', unitType: 'F', province: 'HOL', target: 'HEL' },
+		});
+	});
+
+	it('parses retreat with coast', () => {
+		const result = parseOrder('F SPA/NC R MAO');
+		expect(result).toEqual({
+			ok: true,
+			order: {
+				raw: 'F SPA/NC R MAO',
+				type: 'retreat',
+				unitType: 'F',
+				province: 'SPA/NC',
+				target: 'MAO',
+			},
 		});
 	});
 
@@ -281,6 +304,14 @@ describe('normalizeOrderString', () => {
 	it('normalizes "WAIVE 2" to WAIVE (count handled by expandWaives)', () => {
 		expect(normalizeOrderString('WAIVE 2')).toBe('WAIVE');
 	});
+
+	it('normalizes trailing R to retreat syntax', () => {
+		expect(normalizeOrderString('F HOL - HEL R')).toBe('F HOL R HEL');
+	});
+
+	it('normalizes RETREAT keyword to R', () => {
+		expect(normalizeOrderString('F HOL RETREAT HEL')).toBe('F HOL R HEL');
+	});
 });
 
 describe('expandWaives', () => {
@@ -302,6 +333,32 @@ describe('expandWaives', () => {
 
 	it('is case-insensitive', () => {
 		expect(expandWaives(['waive 3'])).toEqual(['WAIVE', 'WAIVE', 'WAIVE']);
+	});
+});
+
+describe('convertMovesToRetreats', () => {
+	it('converts move syntax to retreat during retreat phase', () => {
+		expect(convertMovesToRetreats(['F HOL - HEL'], 'S1902R')).toEqual(['F HOL R HEL']);
+	});
+
+	it('leaves retreat syntax untouched', () => {
+		expect(convertMovesToRetreats(['F HOL R HEL'], 'S1902R')).toEqual(['F HOL R HEL']);
+	});
+
+	it('leaves disband orders untouched', () => {
+		expect(convertMovesToRetreats(['F HOL D'], 'S1902R')).toEqual(['F HOL D']);
+	});
+
+	it('does nothing during non-retreat phases', () => {
+		expect(convertMovesToRetreats(['F HOL - HEL'], 'S1902M')).toEqual(['F HOL - HEL']);
+		expect(convertMovesToRetreats(['A PAR - BUR'], 'F1901A')).toEqual(['A PAR - BUR']);
+	});
+
+	it('handles mixed orders in retreat phase', () => {
+		expect(convertMovesToRetreats(['F HOL - HEL', 'A BUR D'], 'S1902R')).toEqual([
+			'F HOL R HEL',
+			'A BUR D',
+		]);
 	});
 });
 

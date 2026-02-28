@@ -8,6 +8,7 @@
  *   A MAR S A PAR    → support hold
  *   A MAR S A PAR - BUR → support move
  *   F MAO C A BRE - SPA → convoy
+ *   A BUR R PAR      → retreat
  *   A MUN B          → build
  *   A MUN D          → disband
  *   F BUL/SC - GRE   → move (with coast specification)
@@ -23,6 +24,7 @@ const SUPPORT_MOVE_RE =
 	/^([AF]) ([A-Z]{3}(?:\/[NSEW]C)?) S ([AF]) ([A-Z]{3}(?:\/[NSEW]C)?) - ([A-Z]{3}(?:\/[NSEW]C)?)$/;
 const CONVOY_RE =
 	/^([AF]) ([A-Z]{3}(?:\/[NSEW]C)?) C ([AF]) ([A-Z]{3}(?:\/[NSEW]C)?) - ([A-Z]{3}(?:\/[NSEW]C)?)$/;
+const RETREAT_RE = /^([AF]) ([A-Z]{3}(?:\/[NSEW]C)?) R ([A-Z]{3}(?:\/[NSEW]C)?)$/;
 const BUILD_RE = /^([AF]) ([A-Z]{3}(?:\/[NSEW]C)?) B$/;
 const DISBAND_RE = /^([AF]) ([A-Z]{3}(?:\/[NSEW]C)?) D$/;
 
@@ -108,6 +110,21 @@ export function parseOrder(raw: string): ParseOrderResult {
 			order: {
 				raw: trimmed,
 				type: 'move',
+				unitType: g(match, 1) as UnitType,
+				province: g(match, 2),
+				target: g(match, 3),
+			},
+		};
+	}
+
+	// Retreat: A BUR R PAR
+	match = trimmed.match(RETREAT_RE);
+	if (match) {
+		return {
+			ok: true,
+			order: {
+				raw: trimmed,
+				type: 'retreat',
 				unitType: g(match, 1) as UnitType,
 				province: g(match, 2),
 				target: g(match, 3),
@@ -215,7 +232,11 @@ export function normalizeOrderString(order: string): string {
 		.replace(/\s*-\s*/g, ' - ')
 		.replace(/\(VIA CONVOY\)/, 'VIA')
 		// Strip trailing H from support-hold: "A MAR S A PAR H" → "A MAR S A PAR"
-		.replace(/^([AF] [A-Z]{3}(?:\/[NSEW]C)? S [AF] [A-Z]{3}(?:\/[NSEW]C)?) H$/, '$1');
+		.replace(/^([AF] [A-Z]{3}(?:\/[NSEW]C)? S [AF] [A-Z]{3}(?:\/[NSEW]C)?) H$/, '$1')
+		// Normalize trailing R: "F HOL - HEL R" → "F HOL R HEL"
+		.replace(/^([AF] [A-Z]{3}(?:\/[NSEW]C)?) - ([A-Z]{3}(?:\/[NSEW]C)?) R$/, '$1 R $2')
+		// Normalize "RETREAT" keyword: "F HOL RETREAT HEL" → "F HOL R HEL"
+		.replace(/^([AF] [A-Z]{3}(?:\/[NSEW]C)?) RETREAT ([A-Z]{3}(?:\/[NSEW]C)?)$/, '$1 R $2');
 
 	// Auto-infer coast for fleet moves: "F MAO - SPA" → "F MAO - SPA/NC" (if unambiguous)
 	const moveMatch = normalized.match(/^F ([A-Z]{3}(?:\/[NSEW]C)?) - ([A-Z]{3})$/);
@@ -229,6 +250,19 @@ export function normalizeOrderString(order: string): string {
 	}
 
 	return normalized;
+}
+
+/**
+ * Convert move-syntax orders to retreat-syntax during retreat phases.
+ * Players intuitively write "F HOL - HEL" during retreats — the dash means
+ * "move to" in their mental model. This converts it to "F HOL R HEL" which
+ * the diplomacy library expects.
+ */
+export function convertMovesToRetreats(orders: string[], phase: string): string[] {
+	if (!phase.endsWith('R')) return orders;
+	return orders.map((o) =>
+		o.replace(/^([AF] [A-Z]{3}(?:\/[NSEW]C)?) - ([A-Z]{3}(?:\/[NSEW]C)?)$/, '$1 R $2'),
+	);
 }
 
 /**
