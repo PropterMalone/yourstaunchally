@@ -22,22 +22,6 @@ services:
       - default
       - propter-net
 
-  feed:
-    build: .
-    restart: unless-stopped
-    command: ["node", "packages/feed/dist/index.js"]
-    environment:
-      - DB_PATH=/data/yourstaunchally.db
-      - FEED_PORT=3001
-      - FEED_HOSTNAME=${FEED_HOSTNAME:-localhost}
-      - FEED_PUBLISHER_DID=${FEED_PUBLISHER_DID:-did:web:localhost}
-    volumes:
-      - ./data:/data:ro
-    ports:
-      - "3005:3001"
-    depends_on:
-      - engine
-
 volumes:
   ollama-data:
 

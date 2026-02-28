@@ -9,3 +9,4 @@ scripts/accounts.json
 .venv/
 __pycache__/
 *.pyc
+.docker/

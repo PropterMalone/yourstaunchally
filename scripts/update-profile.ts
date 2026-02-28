@@ -30,7 +30,7 @@ async function main() {
 
 Mention me with "new game" to start. Orders via DM.
 
-FAQ: malone.taildf301e.ts.net:3443/faq
+FAQ: malone.taildf301e.ts.net/ysa/faq
 Source: github.com/PropterMalone/yourstaunchally
 Run by @proptermalone.bsky.social`,
 		},

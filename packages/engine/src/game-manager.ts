@@ -14,6 +14,7 @@ import {
 	cancelOrders,
 	checkSoloVictory,
 	claimPower,
+	convertMovesToRetreats,
 	createGame,
 	expandWaives,
 	finishGameSoloVictory,
@@ -584,7 +585,10 @@ export function createGameManager(deps: GameManagerDeps) {
 			return;
 		}
 
-		const normalized = expandWaives(command.orderLines).map(normalizeOrderString);
+		const afterNorm = expandWaives(command.orderLines).map(normalizeOrderString);
+		const normalized = state.currentPhase
+			? convertMovesToRetreats(afterNorm, state.currentPhase)
+			: afterNorm;
 		const orders = normalized.filter((o) => parseOrder(o).ok);
 		const dropped = normalized.filter((o) => !parseOrder(o).ok);
 		if (dropped.length > 0) {
