@@ -10,3 +10,4 @@ scripts/accounts.json
 __pycache__/
 *.pyc
 .docker/
+CLAUDE.md
