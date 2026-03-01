@@ -145,6 +145,9 @@ export interface GameState {
 	/** Draw vote state for current phase */
 	drawVote: DrawVote;
 
+	/** Powers that have orderable units this phase. Null = assume all (pre-migration fallback). */
+	orderablePowers: Power[] | null;
+
 	/** Phase deadline (ISO timestamp). Null in lobby. */
 	phaseDeadline: string | null;
 

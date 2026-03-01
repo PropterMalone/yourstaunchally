@@ -23,6 +23,7 @@ export function createGame(gameId: string, now = new Date().toISOString()): Game
 		players: [],
 		currentOrders: {},
 		drawVote: { votedPowers: [] },
+		orderablePowers: null,
 		phaseDeadline: null,
 		announcementPost: null,
 		lastCenters: null,
@@ -223,11 +224,15 @@ export function cancelOrders(
 	return { ok: true, state: { ...state, currentOrders: rest } };
 }
 
-/** Get powers that haven't submitted orders yet */
+/** Get powers that haven't submitted orders yet.
+ *  During retreat/build phases, only powers with orderable units need to submit. */
 export function getPendingPowers(state: GameState): Power[] {
 	const assignedPowers = state.players.map((p) => p.power).filter((p): p is Power => p !== null);
+	const mustOrder = state.orderablePowers
+		? assignedPowers.filter((p) => (state.orderablePowers as Power[]).includes(p))
+		: assignedPowers;
 
-	return assignedPowers.filter((power) => !state.currentOrders[power]);
+	return mustOrder.filter((power) => !state.currentOrders[power]);
 }
 
 /** Check if all assigned powers have submitted orders */
@@ -281,6 +286,7 @@ export function advancePhase(
 	diplomacyState: unknown,
 	config: GameConfig = DEFAULT_GAME_CONFIG,
 	now = new Date().toISOString(),
+	orderablePowers: Power[] | null = null,
 ): GameState {
 	const isMovement = newPhase.endsWith('M');
 	const phaseHours = isMovement ? config.movementPhaseHours : config.retreatPhaseHours;
@@ -293,6 +299,7 @@ export function advancePhase(
 		drawVote: { votedPowers: [] },
 		phaseDeadline: deadline,
 		diplomacyState,
+		orderablePowers,
 	};
 }
 

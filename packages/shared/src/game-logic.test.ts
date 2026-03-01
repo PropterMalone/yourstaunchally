@@ -259,6 +259,20 @@ describe('getPendingPowers / allOrdersSubmitted', () => {
 		expect(getPendingPowers(game)).toHaveLength(0);
 		expect(allOrdersSubmitted(game)).toBe(true);
 	});
+
+	it('only counts orderable powers during retreat/build phases', () => {
+		const game = activeGame();
+		game.orderablePowers = ['GERMANY'] as Power[];
+		expect(getPendingPowers(game)).toEqual(['GERMANY']);
+		expect(allOrdersSubmitted(game)).toBe(false);
+
+		const result = submitOrders(game, 'GERMANY', ['F HOL R HEL']);
+		expect(result.ok).toBe(true);
+		if (result.ok) {
+			expect(getPendingPowers(result.state)).toHaveLength(0);
+			expect(allOrdersSubmitted(result.state)).toBe(true);
+		}
+	});
 });
 
 describe('voteDraw', () => {

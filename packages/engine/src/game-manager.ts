@@ -8,6 +8,7 @@ import {
 	type GameConfig,
 	type GameState,
 	POWERS,
+	type Power,
 	addPlayer,
 	advancePhase,
 	allOrdersSubmitted,
@@ -1015,9 +1016,30 @@ export function createGameManager(deps: GameManagerDeps) {
 				return;
 			}
 
+			// Determine which powers have orderable units in the new phase
+			let orderablePowers: Power[] | null = null;
+			try {
+				const { getPossibleOrders } = await import('./adjudicator.js');
+				const possible = await getPossibleOrders(adjResult.gameState);
+				orderablePowers = (
+					Object.entries(possible.possibleOrders) as [Power, Record<string, string[]>][]
+				)
+					.filter(([_, locs]) => Object.values(locs).flat().length > 0)
+					.map(([power]) => power);
+			} catch (error) {
+				console.warn(`[phase] Failed to get orderable powers for #${state.gameId}: ${error}`);
+			}
+
 			// Advance to next phase, store latest centers/units for status queries
 			const advanced = {
-				...advancePhase(state, adjResult.phase, adjResult.gameState, config),
+				...advancePhase(
+					state,
+					adjResult.phase,
+					adjResult.gameState,
+					config,
+					undefined,
+					orderablePowers,
+				),
 				lastCenters: adjResult.centers,
 				lastUnits: adjResult.units,
 			};
