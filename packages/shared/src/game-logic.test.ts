@@ -4,6 +4,7 @@ import {
 	addPlayer,
 	advancePhase,
 	allOrdersSubmitted,
+	cancelOrderForUnit,
 	cancelOrders,
 	checkSoloVictory,
 	claimPower,
@@ -451,6 +452,58 @@ describe('cancelOrders', () => {
 	it('returns error for inactive game', () => {
 		const game = createGame('test');
 		const r = cancelOrders(game, 'AUSTRIA');
+		expect(r.ok).toBe(false);
+	});
+});
+
+describe('cancelOrderForUnit', () => {
+	it('removes a single unit order and keeps the rest', () => {
+		const game = activeGame();
+		const r1 = submitOrders(game, 'AUSTRIA', ['A BUD H', 'A VIE H', 'F TRI H']);
+		expect(r1.ok).toBe(true);
+		if (!r1.ok) return;
+
+		const r2 = cancelOrderForUnit(r1.state, 'AUSTRIA', 'A VIE');
+		expect(r2.ok).toBe(true);
+		if (!r2.ok) return;
+		expect(r2.state.currentOrders['AUSTRIA']?.orders).toEqual(['A BUD H', 'F TRI H']);
+	});
+
+	it('removes the last order and clears submission entirely', () => {
+		const game = activeGame();
+		const r1 = submitOrders(game, 'AUSTRIA', ['A BUD H']);
+		expect(r1.ok).toBe(true);
+		if (!r1.ok) return;
+
+		const r2 = cancelOrderForUnit(r1.state, 'AUSTRIA', 'A BUD');
+		expect(r2.ok).toBe(true);
+		if (!r2.ok) return;
+		expect(r2.state.currentOrders['AUSTRIA']).toBeUndefined();
+	});
+
+	it('returns error when no orders submitted', () => {
+		const game = activeGame();
+		const r = cancelOrderForUnit(game, 'AUSTRIA', 'A BUD');
+		expect(r.ok).toBe(false);
+		if (r.ok) return;
+		expect(r.error).toBe('No orders to cancel');
+	});
+
+	it('returns error when unit not found in orders', () => {
+		const game = activeGame();
+		const r1 = submitOrders(game, 'AUSTRIA', ['A BUD H', 'F TRI H']);
+		expect(r1.ok).toBe(true);
+		if (!r1.ok) return;
+
+		const r2 = cancelOrderForUnit(r1.state, 'AUSTRIA', 'A VIE');
+		expect(r2.ok).toBe(false);
+		if (r2.ok) return;
+		expect(r2.error).toBe('No order found for A VIE');
+	});
+
+	it('returns error for inactive game', () => {
+		const game = createGame('test');
+		const r = cancelOrderForUnit(game, 'AUSTRIA', 'A BUD');
 		expect(r.ok).toBe(false);
 	});
 });

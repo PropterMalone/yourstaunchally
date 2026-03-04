@@ -224,6 +224,41 @@ export function cancelOrders(
 	return { ok: true, state: { ...state, currentOrders: rest } };
 }
 
+/** Cancel a single unit's order, keeping the rest */
+export function cancelOrderForUnit(
+	state: GameState,
+	power: Power,
+	unitKey: string,
+): { ok: true; state: GameState } | { ok: false; error: string } {
+	if (state.status !== 'active') {
+		return { ok: false, error: 'Game is not active' };
+	}
+	const phaseOrders = state.currentOrders[power];
+	if (!phaseOrders) {
+		return { ok: false, error: 'No orders to cancel' };
+	}
+	const remaining = phaseOrders.orders.filter(
+		(o) => o.split(/\s+/).slice(0, 2).join(' ') !== unitKey,
+	);
+	if (remaining.length === phaseOrders.orders.length) {
+		return { ok: false, error: `No order found for ${unitKey}` };
+	}
+	if (remaining.length === 0) {
+		const { [power]: _, ...rest } = state.currentOrders;
+		return { ok: true, state: { ...state, currentOrders: rest } };
+	}
+	return {
+		ok: true,
+		state: {
+			...state,
+			currentOrders: {
+				...state.currentOrders,
+				[power]: { ...phaseOrders, orders: remaining },
+			},
+		},
+	};
+}
+
 /** Get powers that haven't submitted orders yet.
  *  During retreat/build phases, only powers with orderable units need to submit. */
 export function getPendingPowers(state: GameState): Power[] {

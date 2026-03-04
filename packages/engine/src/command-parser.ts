@@ -37,6 +37,7 @@ export type DmCommand =
 	| { type: 'show_possible'; gameId: string }
 	| { type: 'show_map'; gameId: string }
 	| { type: 'cancel_orders'; gameId: string }
+	| { type: 'cancel_order'; gameId: string; unitKey: string }
 	| { type: 'my_games' }
 	| { type: 'help' }
 	| { type: 'game_menu'; gameId: string }
@@ -163,6 +164,13 @@ export function parseDm(text: string): DmCommand {
 
 	if (lowerRest === 'cancel' || lowerRest === 'clear' || lowerRest === 'cancel all') {
 		return { type: 'cancel_orders', gameId };
+	}
+
+	// Cancel a single unit's order: "cancel A PAR", "cancel F TRI"
+	const cancelUnitMatch = lowerRest.match(/^cancel\s+([af])\s+([a-z]{3}(?:\/[nsew]c)?)$/i);
+	if (cancelUnitMatch) {
+		const unitKey = `${(cancelUnitMatch[1] as string).toUpperCase()} ${(cancelUnitMatch[2] as string).toUpperCase()}`;
+		return { type: 'cancel_order', gameId, unitKey };
 	}
 
 	// Parse as order lines (semicolon, comma, or newline separated)

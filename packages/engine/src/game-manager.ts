@@ -12,6 +12,7 @@ import {
 	addPlayer,
 	advancePhase,
 	allOrdersSubmitted,
+	cancelOrderForUnit,
 	cancelOrders,
 	checkSoloVictory,
 	claimPower,
@@ -549,13 +550,16 @@ export function createGameManager(deps: GameManagerDeps) {
 			case 'cancel_orders':
 				await handleCancelOrders(command, dm);
 				break;
+			case 'cancel_order':
+				await handleCancelOrder(command, dm);
+				break;
 			case 'my_games':
 				await handleMyGames(dm);
 				break;
 			case 'help':
 				await dmSender.sendDm(
 					dm.senderDid,
-					'DM commands:\n\n#gameId A PAR - BUR; F BRE - MAO \u2014 Submit orders\n#gameId possible \u2014 See legal orders\n#gameId orders \u2014 Review submitted orders\n#gameId cancel \u2014 Cancel all orders\nmy games \u2014 List your active games\n\nSeparate orders with semicolons, commas, or newlines. All deadlines are UTC.',
+					'DM commands:\n\n#gameId A PAR - BUR; F BRE - MAO \u2014 Submit orders\n#gameId possible \u2014 See legal orders\n#gameId orders \u2014 Review submitted orders\n#gameId cancel A PAR \u2014 Cancel one unit\'s order\n#gameId cancel \u2014 Cancel all orders\nmy games \u2014 List your active games\n\nSeparate orders with semicolons, commas, or newlines. All deadlines are UTC.',
 				);
 				break;
 			case 'game_menu':
@@ -768,6 +772,40 @@ export function createGameManager(deps: GameManagerDeps) {
 		);
 	}
 
+	async function handleCancelOrder(
+		command: DmCommand & { type: 'cancel_order' },
+		dm: InboundDm,
+	): Promise<void> {
+		const state = db.loadGame(command.gameId);
+		if (!state) {
+			await dmSender.sendDm(dm.senderDid, `Game #${command.gameId} not found.`);
+			return;
+		}
+
+		const power = getPowerForPlayer(state, dm.senderDid);
+		if (!power) {
+			await dmSender.sendDm(dm.senderDid, 'You are not playing in this game.');
+			return;
+		}
+
+		const result = cancelOrderForUnit(state, power, command.unitKey);
+		if (!result.ok) {
+			await dmSender.sendDm(dm.senderDid, result.error);
+			return;
+		}
+
+		db.saveGame(result.state);
+		console.log(`[orders] #${command.gameId} ${power}: cancelled order for ${command.unitKey}`);
+		const remaining = result.state.currentOrders[power]?.orders;
+		const remainingMsg = remaining
+			? `\n\nRemaining orders:\n${remaining.join('\n')}`
+			: '\n\nNo orders remaining.';
+		await dmSender.sendDm(
+			dm.senderDid,
+			`Cancelled order for ${command.unitKey} in #${command.gameId}.${remainingMsg}`,
+		);
+	}
+
 	async function handleShowPossible(
 		command: DmCommand & { type: 'show_possible' },
 		dm: InboundDm,
@@ -861,6 +899,26 @@ export function createGameManager(deps: GameManagerDeps) {
 
 	/** Handle unrecognized DMs — use LLM for in-character response, or stay silent */
 	async function handleUnknownDm(dm: InboundDm): Promise<void> {
+		// Detect order-like text missing a game tag: "A PAR - BUR" or "F BRE - MAO"
+		if (/^[AF]\s+[A-Z]{3}/i.test(dm.text.trim())) {
+			const activeGames = db.loadActiveGames();
+			const myGames = activeGames.filter((g) => g.players.some((p) => p.did === dm.senderDid));
+			if (myGames.length === 1) {
+				const g = myGames[0] as GameState;
+				await dmSender.sendDm(
+					dm.senderDid,
+					`Looks like orders but missing a game tag. Try:\n#${g.gameId} ${dm.text.trim()}`,
+				);
+			} else if (myGames.length > 1) {
+				const ids = myGames.map((g) => `#${g.gameId}`).join(', ');
+				await dmSender.sendDm(
+					dm.senderDid,
+					`Looks like orders but missing a game tag. You're in: ${ids}\n\nPrefix your orders with the game ID, e.g.:\n#${myGames[0]?.gameId} ${dm.text.trim()}`,
+				);
+			}
+			return;
+		}
+
 		if (!llm) return; // No LLM configured — stay silent
 
 		// Find the player's game context for the LLM prompt

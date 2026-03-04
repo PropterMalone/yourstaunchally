@@ -196,6 +196,22 @@ describe('parseDm', () => {
 		expect(parseDm('#abc123 cancel all')).toEqual({ type: 'cancel_orders', gameId: 'abc123' });
 	});
 
+	it('parses "cancel A PAR" as cancel_order for a single unit', () => {
+		expect(parseDm('#abc123 cancel A PAR')).toEqual({
+			type: 'cancel_order',
+			gameId: 'abc123',
+			unitKey: 'A PAR',
+		});
+	});
+
+	it('parses "cancel F TRI" as cancel_order (case insensitive)', () => {
+		expect(parseDm('#abc123 cancel f tri')).toEqual({
+			type: 'cancel_order',
+			gameId: 'abc123',
+			unitKey: 'F TRI',
+		});
+	});
+
 	it('parses "possible moves" as show_possible (not order submission)', () => {
 		expect(parseDm('#abc123 possible moves')).toEqual({ type: 'show_possible', gameId: 'abc123' });
 	});
