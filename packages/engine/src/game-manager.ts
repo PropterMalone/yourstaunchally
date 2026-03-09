@@ -297,7 +297,7 @@ export function createGameManager(deps: GameManagerDeps) {
 				try {
 					await dmSender.sendDm(
 						player.did,
-						`Game #${started.gameId} has started! You are ${player.power}.\n\n${powerAssignmentCommentary(player.power)}\n\nYour units: ${unitList}\n\nSubmit orders via DM:\n#${started.gameId} ${exampleOrder}; ...\n\nSeparate orders with semicolons, commas, or newlines. DM "#${started.gameId} possible" to see all options.\n\nDeadline: ${started.phaseDeadline ? formatAbsoluteDeadline(started.phaseDeadline) : '?'}`,
+						`Game #${started.gameId} has started! You are ${player.power}.\n\n${powerAssignmentCommentary(player.power)}\n\nYour units: ${unitList}\n\nSubmit orders via DM:\n#${started.gameId} ${exampleOrder}; ...\n\nSeparate orders with semicolons, commas, or newlines. DM "help" for all commands.\n\nDeadline: ${started.phaseDeadline ? formatAbsoluteDeadline(started.phaseDeadline) : '?'}`,
 					);
 				} catch (error) {
 					console.warn(`[dm] Failed to DM ${player.handle}: ${error}`);
@@ -559,7 +559,7 @@ export function createGameManager(deps: GameManagerDeps) {
 			case 'help':
 				await dmSender.sendDm(
 					dm.senderDid,
-					'DM commands:\n\n#gameId A PAR - BUR; F BRE - MAO \u2014 Submit orders\n#gameId possible \u2014 See legal orders\n#gameId orders \u2014 Review submitted orders\n#gameId cancel A PAR \u2014 Cancel one unit\'s order\n#gameId cancel \u2014 Cancel all orders\nmy games \u2014 List your active games\n\nSeparate orders with semicolons, commas, or newlines. All deadlines are UTC.',
+					"DM commands:\n\n#gameId A PAR - BUR; F BRE - MAO \u2014 Submit orders\n#gameId possible \u2014 See legal orders\n#gameId orders \u2014 Review submitted orders\n#gameId cancel A PAR \u2014 Cancel one unit's order\n#gameId cancel \u2014 Cancel all orders\nmy games \u2014 List your active games\n\nSeparate orders with semicolons, commas, or newlines. All deadlines are UTC.",
 				);
 				break;
 			case 'game_menu':
@@ -672,9 +672,9 @@ export function createGameManager(deps: GameManagerDeps) {
 			);
 		}
 
-		// All orders in → shorten deadline to 20-min grace period (so players can revise)
+		// All orders in → shorten deadline to 30-min grace period (so players can revise)
 		if (allOrdersSubmitted(result.state)) {
-			const GRACE_PERIOD_MS = 20 * 60 * 1000;
+			const GRACE_PERIOD_MS = 30 * 60 * 1000;
 			const graceDeadline = new Date(Date.now() + GRACE_PERIOD_MS).toISOString();
 			const currentDeadline = result.state.phaseDeadline;
 
@@ -687,7 +687,7 @@ export function createGameManager(deps: GameManagerDeps) {
 				);
 
 				// Public announcement (QT previous thread for connective tissue)
-				const graceMsg = `⏰ Game #${command.gameId} — all orders are in! ${allOrdersInCommentary()}\n\nAdjudication in 20 minutes. You may revise orders until then.`;
+				const graceMsg = `⏰ Game #${command.gameId} — all orders are in! ${allOrdersInCommentary()}\n\nAdjudication in 30 minutes. You may revise orders until then.`;
 				const prev = db.getLatestGamePost(command.gameId);
 				const gracePost = prev
 					? await postWithQuote(agent, graceMsg, prev)
@@ -701,12 +701,18 @@ export function createGameManager(deps: GameManagerDeps) {
 					result.state.currentPhase,
 				);
 
-				// DM all players
+				// DM the player who triggered the grace period with an extra-prominent message
+				await dmSender.sendDm(
+					dm.senderDid,
+					`🚨 Your orders completed the set for #${command.gameId} — adjudication starts in 30 minutes!\n\nAll players can still revise orders until then. Double-check yours now if needed.`,
+				);
+
+				// DM other players
 				for (const player of result.state.players) {
-					if (player.did) {
+					if (player.did && player.did !== dm.senderDid) {
 						await dmSender.sendDm(
 							player.did,
-							`⏰ All orders are in for #${command.gameId}. Adjudication in 20 minutes — DM revised orders now if you want to change anything.`,
+							`⏰ All orders are in for #${command.gameId}. Adjudication in 30 minutes — DM revised orders now if you want to change anything.`,
 						);
 					}
 				}
@@ -919,13 +925,19 @@ export function createGameManager(deps: GameManagerDeps) {
 			return;
 		}
 
-		if (!llm) return; // No LLM configured — stay silent
-
 		// Find the player's game context for the LLM prompt
 		const activeGames = db.loadActiveGames();
 		const playerGame = activeGames.find((g) => g.players.some((p) => p.did === dm.senderDid));
 
 		if (!playerGame) return; // Not a player — ignore
+
+		if (!llm) {
+			await dmSender.sendDm(
+				dm.senderDid,
+				`I didn't understand that. DM "help" for a list of commands.`,
+			);
+			return;
+		}
 
 		const player = playerGame.players.find((p) => p.did === dm.senderDid);
 		const power = player?.power ?? 'Unknown';
@@ -936,6 +948,7 @@ export function createGameManager(deps: GameManagerDeps) {
 				phase: playerGame.currentPhase ?? 'unknown',
 				situation: 'chat',
 				playerMessage: dm.text,
+				userDid: dm.senderDid,
 			});
 
 			if (response) {

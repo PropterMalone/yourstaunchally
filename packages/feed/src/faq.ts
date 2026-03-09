@@ -56,7 +56,7 @@ export const FAQ_HTML = `<!DOCTYPE html>
   <tr><td>Retreat</td><td>24 hours</td><td>Dislodged units retreat or disband</td></tr>
   <tr><td>Build (Fall only)</td><td>24 hours</td><td>Build new units in home centers or disband excess</td></tr>
 </table>
-<p>Phases advance early when all players have submitted orders (with a 20-minute grace period to revise). All deadlines are in <strong>UTC</strong>.</p>
+<p>Phases advance early when all players have submitted orders (with a 30-minute grace period to revise). All deadlines are in <strong>UTC</strong>.</p>
 
 <h2>The Seven Powers</h2>
 
