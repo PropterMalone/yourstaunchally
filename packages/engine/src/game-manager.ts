@@ -616,6 +616,61 @@ export function createGameManager(deps: GameManagerDeps) {
 		await reply(`You've left the queue. (${size}/${config.maxPlayers} remaining)`);
 	}
 
+	/** Resolve a DID to a handle via the agent */
+	async function resolveHandle(did: string): Promise<string> {
+		try {
+			const profile = await agent.getProfile({ actor: did });
+			return profile.data.handle;
+		} catch {
+			return did;
+		}
+	}
+
+	async function handlePlayDm(dm: InboundDm): Promise<void> {
+		if (isInAnyGame(dm.senderDid)) {
+			await dmSender.sendDm(dm.senderDid, "You're already in a game. Finish or leave it first.");
+			return;
+		}
+		if (db.isQueued(dm.senderDid)) {
+			const size = db.getQueueSize();
+			await dmSender.sendDm(dm.senderDid, `You're already in the queue (${size}/${config.maxPlayers}).`);
+			return;
+		}
+		const handle = await resolveHandle(dm.senderDid);
+		db.queuePlayer(dm.senderDid, handle);
+		const size = db.getQueueSize();
+		await dmSender.sendDm(
+			dm.senderDid,
+			`You're in the queue! (${size}/${config.maxPlayers}) Game starts automatically at ${config.maxPlayers}. Mention me with "leave queue" or DM "leave queue" to drop out.`,
+		);
+		if (size >= config.maxPlayers) {
+			const noopReply = async (text: string) => {
+				console.log(`[queue] matchmake from DM: ${text}`);
+			};
+			await matchmakeFromQueue(noopReply);
+		}
+	}
+
+	async function handleLeaveQueueDm(dm: InboundDm): Promise<void> {
+		if (!db.isQueued(dm.senderDid)) {
+			await dmSender.sendDm(dm.senderDid, "You're not in the queue.");
+			return;
+		}
+		db.dequeuePlayer(dm.senderDid);
+		const size = db.getQueueSize();
+		await dmSender.sendDm(dm.senderDid, `You've left the queue. (${size}/${config.maxPlayers} remaining)`);
+	}
+
+	async function handleQueueStatusDm(dm: InboundDm): Promise<void> {
+		const queue = db.getQueue();
+		if (queue.length === 0) {
+			await dmSender.sendDm(dm.senderDid, 'Queue is empty. DM "play" to join!');
+			return;
+		}
+		const handles = queue.map((p) => `@${p.handle}`).join(', ');
+		await dmSender.sendDm(dm.senderDid, `Queue: ${queue.length}/${config.maxPlayers} — ${handles}`);
+	}
+
 	async function handleQueueStatus(reply: (text: string) => Promise<void>): Promise<void> {
 		const queue = db.getQueue();
 		if (queue.length === 0) {
@@ -652,10 +707,19 @@ export function createGameManager(deps: GameManagerDeps) {
 			case 'my_games':
 				await handleMyGames(dm);
 				break;
+			case 'play':
+				await handlePlayDm(dm);
+				break;
+			case 'leave_queue':
+				await handleLeaveQueueDm(dm);
+				break;
+			case 'queue_status':
+				await handleQueueStatusDm(dm);
+				break;
 			case 'help':
 				await dmSender.sendDm(
 					dm.senderDid,
-					"DM commands:\n\n#gameId A PAR - BUR; F BRE - MAO \u2014 Submit orders\n#gameId possible \u2014 See legal orders\n#gameId orders \u2014 Review submitted orders\n#gameId cancel A PAR \u2014 Cancel one unit's order\n#gameId cancel \u2014 Cancel all orders\nmy games \u2014 List your active games\n\nSeparate orders with semicolons, commas, or newlines. All deadlines are UTC.",
+					"DM commands:\n\nplay \u2014 Join the matchmaking queue\nleave queue \u2014 Drop out of the queue\nqueue \u2014 See who's waiting\n\n#gameId A PAR - BUR; F BRE - MAO \u2014 Submit orders\n#gameId possible \u2014 See legal orders\n#gameId orders \u2014 Review submitted orders\n#gameId cancel A PAR \u2014 Cancel one unit's order\n#gameId cancel \u2014 Cancel all orders\nmy games \u2014 List your active games\n\nSeparate orders with semicolons, commas, or newlines. All deadlines are UTC.",
 				);
 				break;
 			case 'game_menu':

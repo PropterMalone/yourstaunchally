@@ -239,6 +239,26 @@ describe('parseDm', () => {
 		});
 	});
 
+	it('parses "play" DM', () => {
+		expect(parseDm('play')).toEqual({ type: 'play' });
+	});
+
+	it('parses "lfg" DM', () => {
+		expect(parseDm('lfg')).toEqual({ type: 'play' });
+	});
+
+	it('parses "leave queue" DM', () => {
+		expect(parseDm('leave queue')).toEqual({ type: 'leave_queue' });
+	});
+
+	it('parses "unqueue" DM', () => {
+		expect(parseDm('unqueue')).toEqual({ type: 'leave_queue' });
+	});
+
+	it('parses "queue" DM', () => {
+		expect(parseDm('queue')).toEqual({ type: 'queue_status' });
+	});
+
 	it('parses "possible moves" as show_possible (not order submission)', () => {
 		expect(parseDm('#abc123 possible moves')).toEqual({ type: 'show_possible', gameId: 'abc123' });
 	});

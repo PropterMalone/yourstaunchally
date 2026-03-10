@@ -42,6 +42,9 @@ export type DmCommand =
 	| { type: 'cancel_orders'; gameId: string }
 	| { type: 'cancel_order'; gameId: string; unitKey: string }
 	| { type: 'my_games' }
+	| { type: 'play' }
+	| { type: 'leave_queue' }
+	| { type: 'queue_status' }
 	| { type: 'help' }
 	| { type: 'game_menu'; gameId: string }
 	| { type: 'unknown'; text: string };
@@ -134,6 +137,18 @@ export function parseDm(text: string): DmCommand {
 
 	if (lower === 'help' || lower === '?') {
 		return { type: 'help' };
+	}
+
+	if (lower === 'play' || lower === 'lfg') {
+		return { type: 'play' };
+	}
+
+	if (lower === 'leave queue' || lower === 'unqueue') {
+		return { type: 'leave_queue' };
+	}
+
+	if (lower === 'queue') {
+		return { type: 'queue_status' };
 	}
 
 	const gameIdMatch = trimmed.match(GAME_ID_RE);
