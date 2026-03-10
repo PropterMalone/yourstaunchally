@@ -9,6 +9,7 @@ import {
 	checkSoloVictory,
 	claimPower,
 	createGame,
+	createGameWithPlayers,
 	finishGameSoloVictory,
 	formatCenterCounts,
 	generateGameId,
@@ -63,6 +64,40 @@ describe('generateGameId', () => {
 	it('generates unique IDs', () => {
 		const ids = new Set(Array.from({ length: 100 }, generateGameId));
 		expect(ids.size).toBeGreaterThan(90); // Probabilistic but safe
+	});
+});
+
+describe('createGameWithPlayers', () => {
+	it('creates a game with multiple players pre-joined', () => {
+		const state = createGameWithPlayers('test01', [
+			{ did: 'did:plc:aaa', handle: 'alice.bsky.social' },
+			{ did: 'did:plc:bbb', handle: 'bob.bsky.social' },
+			{ did: 'did:plc:ccc', handle: 'carol.bsky.social' },
+		]);
+		expect(state.status).toBe('lobby');
+		expect(state.players).toHaveLength(3);
+		expect(state.players[0]?.handle).toBe('alice.bsky.social');
+		expect(state.players[2]?.handle).toBe('carol.bsky.social');
+	});
+
+	it('creates a game with 7 players ready to start', () => {
+		const players = Array.from({ length: 7 }, (_, i) => ({
+			did: `did:plc:${i}`,
+			handle: `player${i}.bsky.social`,
+		}));
+		const state = createGameWithPlayers('test01', players);
+		expect(state.players).toHaveLength(7);
+		const result = startGame(state, undefined, noShuffle);
+		expect(result.ok).toBe(true);
+	});
+
+	it('throws on duplicate player', () => {
+		expect(() =>
+			createGameWithPlayers('test01', [
+				{ did: 'did:plc:aaa', handle: 'alice.bsky.social' },
+				{ did: 'did:plc:aaa', handle: 'alice.bsky.social' },
+			]),
+		).toThrow('Already joined');
 	});
 });
 

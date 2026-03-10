@@ -18,6 +18,7 @@ import {
 	claimPower,
 	convertMovesToRetreats,
 	createGame,
+	createGameWithPlayers,
 	expandWaives,
 	finishGameSoloVictory,
 	formatCenterCounts,
@@ -163,6 +164,15 @@ export function createGameManager(deps: GameManagerDeps) {
 			case 'games':
 				await handleGames(reply);
 				break;
+			case 'play':
+				await handlePlay(notification, reply);
+				break;
+			case 'leave_queue':
+				await handleLeaveQueue(notification, reply);
+				break;
+			case 'queue_status':
+				await handleQueueStatus(reply);
+				break;
 			case 'help':
 				await reply(HELP_TEXT);
 				break;
@@ -217,6 +227,11 @@ export function createGameManager(deps: GameManagerDeps) {
 		if (!result.ok) {
 			await reply(result.error);
 			return;
+		}
+
+		// Auto-dequeue if player was in the signup queue
+		if (db.isQueued(notification.authorDid)) {
+			db.dequeuePlayer(notification.authorDid);
 		}
 
 		db.saveGame(result.state);
@@ -391,13 +406,17 @@ export function createGameManager(deps: GameManagerDeps) {
 	async function handleGames(reply: (text: string) => Promise<void>): Promise<void> {
 		const activeGames = db.loadActiveGames();
 		const lobbyGames = db.loadLobbyGames();
+		const queueSize = db.getQueueSize();
 
-		if (activeGames.length === 0 && lobbyGames.length === 0) {
-			await reply('No active or open games. Start one with "new game"!');
+		if (activeGames.length === 0 && lobbyGames.length === 0 && queueSize === 0) {
+			await reply('No active or open games. Mention "play" to join the queue!');
 			return;
 		}
 
 		const lines: string[] = [];
+		if (queueSize > 0) {
+			lines.push(`Queue: ${queueSize}/${config.maxPlayers} waiting`);
+		}
 		for (const game of lobbyGames) {
 			lines.push(`#${game.gameId} — Lobby (${game.players.length}/${config.maxPlayers} players)`);
 		}
@@ -528,6 +547,83 @@ export function createGameManager(deps: GameManagerDeps) {
 				console.warn(`[dm] Failed to DM ${notification.authorHandle}: ${error}`);
 			}
 		}
+	}
+
+	/** Check if a player is in any active or lobby game */
+	function isInAnyGame(did: string): boolean {
+		const active = db.loadActiveGames();
+		const lobbies = db.loadLobbyGames();
+		return [...active, ...lobbies].some((g) => g.players.some((p) => p.did === did));
+	}
+
+	async function handlePlay(
+		notification: MentionNotification,
+		reply: (text: string) => Promise<void>,
+	): Promise<void> {
+		if (isInAnyGame(notification.authorDid)) {
+			await reply("You're already in a game. Finish or leave it first.");
+			return;
+		}
+
+		if (db.isQueued(notification.authorDid)) {
+			const size = db.getQueueSize();
+			await reply(`You're already in the queue (${size}/${config.maxPlayers}).`);
+			return;
+		}
+
+		db.queuePlayer(notification.authorDid, notification.authorHandle);
+		const size = db.getQueueSize();
+		await reply(
+			`You're in the queue! (${size}/${config.maxPlayers}) Game starts automatically at ${config.maxPlayers}. Mention me with "leave queue" to drop out.`,
+		);
+
+		if (size >= config.maxPlayers) {
+			await matchmakeFromQueue(reply);
+		}
+	}
+
+	async function matchmakeFromQueue(reply: (text: string) => Promise<void>): Promise<void> {
+		const queue = db.getQueue();
+		if (queue.length < config.maxPlayers) return;
+
+		const players = queue.slice(0, config.maxPlayers);
+		const gameId = generateGameId();
+		const state = createGameWithPlayers(
+			gameId,
+			players.map((p) => ({ did: p.did, handle: p.handle })),
+		);
+
+		db.dequeuePlayers(players.map((p) => p.did));
+		db.saveGame(state);
+
+		const handles = players.map((p) => `@${p.handle}`).join(', ');
+		await reply(`Queue full! Starting game #${gameId} with ${handles}`);
+
+		await doStartGame(state, reply);
+	}
+
+	async function handleLeaveQueue(
+		notification: MentionNotification,
+		reply: (text: string) => Promise<void>,
+	): Promise<void> {
+		if (!db.isQueued(notification.authorDid)) {
+			await reply("You're not in the queue.");
+			return;
+		}
+
+		db.dequeuePlayer(notification.authorDid);
+		const size = db.getQueueSize();
+		await reply(`You've left the queue. (${size}/${config.maxPlayers} remaining)`);
+	}
+
+	async function handleQueueStatus(reply: (text: string) => Promise<void>): Promise<void> {
+		const queue = db.getQueue();
+		if (queue.length === 0) {
+			await reply('Queue is empty. Mention me with "play" to join!');
+			return;
+		}
+		const handles = queue.map((p) => `@${p.handle}`).join(', ');
+		await reply(`Queue: ${queue.length}/${config.maxPlayers} — ${handles}`);
 	}
 
 	async function handleDm(dm: InboundDm): Promise<void> {
@@ -1243,8 +1339,20 @@ export function createGameManager(deps: GameManagerDeps) {
 		}
 	}
 
-	/** Tick — check deadlines on all active games, process expired ones */
+	/** Tick — check deadlines on all active games, process expired ones, check queue */
 	async function tick(): Promise<void> {
+		// Safety-net: if queue is full (e.g. after crash), trigger matchmaking
+		try {
+			if (db.getQueueSize() >= config.maxPlayers) {
+				const noopReply = async (text: string) => {
+					console.log(`[queue] matchmake: ${text}`);
+				};
+				await matchmakeFromQueue(noopReply);
+			}
+		} catch (error) {
+			console.error('[queue] Error in tick queue check:', error);
+		}
+
 		const activeGames = db.loadActiveGames();
 		const now = new Date();
 
@@ -1307,10 +1415,17 @@ export function createGameManager(deps: GameManagerDeps) {
 
 const HELP_TEXT = `YourStaunchAlly — Diplomacy on Bluesky
 
-Mention commands:
-• new game — Create a game
-• join #id — Join
+Quick play:
+• play / lfg — Join the matchmaking queue (auto-starts at 7)
+• leave queue — Drop out of the queue
+• queue — See who's waiting
+
+Organized games:
+• new game — Create a private lobby
+• join #id — Join a lobby
 • start #id — Start (2-7 players)
+
+In-game:
 • status #id — Check phase/orders
 • draw #id — Vote for draw
 • claim #id POWER — Claim unassigned power

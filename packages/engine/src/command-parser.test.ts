@@ -80,6 +80,33 @@ describe('parseMention', () => {
 		expect(parseMention('@yourstaunchally list')).toEqual({ type: 'games' });
 	});
 
+	it('parses "play"', () => {
+		expect(parseMention('@yourstaunchally play')).toEqual({ type: 'play' });
+	});
+
+	it('parses "lfg"', () => {
+		expect(parseMention('@yourstaunchally lfg')).toEqual({ type: 'play' });
+	});
+
+	it('parses "leave queue"', () => {
+		expect(parseMention('@yourstaunchally leave queue')).toEqual({ type: 'leave_queue' });
+	});
+
+	it('parses "unqueue"', () => {
+		expect(parseMention('@yourstaunchally unqueue')).toEqual({ type: 'leave_queue' });
+	});
+
+	it('parses "queue"', () => {
+		expect(parseMention('@yourstaunchally queue')).toEqual({ type: 'queue_status' });
+	});
+
+	it('parses "leave #id" as leave (not leave_queue)', () => {
+		expect(parseMention('@yourstaunchally leave #abc123')).toEqual({
+			type: 'leave',
+			gameId: 'abc123',
+		});
+	});
+
 	it('handles unknown commands', () => {
 		const result = parseMention('@yourstaunchally something weird');
 		expect(result.type).toBe('unknown');

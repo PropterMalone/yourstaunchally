@@ -28,6 +28,9 @@ export type MentionCommand =
 	| { type: 'abandon'; gameId: string }
 	| { type: 'claim'; gameId: string; power: string }
 	| { type: 'games' }
+	| { type: 'play' }
+	| { type: 'leave_queue' }
+	| { type: 'queue_status' }
 	| { type: 'help' }
 	| { type: 'unknown'; text: string };
 
@@ -66,6 +69,18 @@ export function parseMention(text: string): MentionCommand {
 
 	if (cleaned === 'games' || cleaned === 'list') {
 		return { type: 'games' };
+	}
+
+	if (cleaned === 'play' || cleaned === 'lfg') {
+		return { type: 'play' };
+	}
+
+	if (cleaned === 'leave queue' || cleaned === 'unqueue') {
+		return { type: 'leave_queue' };
+	}
+
+	if (cleaned === 'queue') {
+		return { type: 'queue_status' };
 	}
 
 	const gameIdMatch = text.match(GAME_ID_RE);

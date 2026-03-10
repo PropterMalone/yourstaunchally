@@ -43,6 +43,19 @@ export interface GameDb {
 	/** Get the most recent phase/game_start post for a game (these have maps) */
 	getLatestMapPost(gameId: string): { uri: string; cid: string } | null;
 
+	/** Add a player to the signup queue */
+	queuePlayer(did: string, handle: string): void;
+	/** Remove a player from the signup queue */
+	dequeuePlayer(did: string): void;
+	/** Remove multiple players from the signup queue */
+	dequeuePlayers(dids: string[]): void;
+	/** Get all queued players in FIFO order */
+	getQueue(): { did: string; handle: string; queuedAt: string }[];
+	/** Get current queue size */
+	getQueueSize(): number;
+	/** Check if a player is in the queue */
+	isQueued(did: string): boolean;
+
 	/** Close the database */
 	close(): void;
 }
@@ -80,6 +93,12 @@ export function createDb(config: DbConfig): GameDb {
 				);
 
 				CREATE INDEX IF NOT EXISTS idx_game_posts_game_id ON game_posts(game_id, indexed_at);
+
+				CREATE TABLE IF NOT EXISTS signup_queue (
+					did TEXT PRIMARY KEY,
+					handle TEXT NOT NULL,
+					queued_at TEXT NOT NULL DEFAULT (datetime('now'))
+				);
 			`);
 
 			// Migration: add cid column to game_posts (nullable for existing rows)
@@ -172,6 +191,45 @@ export function createDb(config: DbConfig): GameDb {
 				)
 				.get(gameId) as { uri: string; cid: string } | undefined;
 			return row ?? null;
+		},
+
+		queuePlayer(did: string, handle: string) {
+			db.prepare(`
+				INSERT OR REPLACE INTO signup_queue (did, handle, queued_at)
+				VALUES (?, ?, datetime('now'))
+			`).run(did, handle);
+		},
+
+		dequeuePlayer(did: string) {
+			db.prepare('DELETE FROM signup_queue WHERE did = ?').run(did);
+		},
+
+		dequeuePlayers(dids: string[]) {
+			const del = db.prepare('DELETE FROM signup_queue WHERE did = ?');
+			const batch = db.transaction((items: string[]) => {
+				for (const did of items) del.run(did);
+			});
+			batch(dids);
+		},
+
+		getQueue(): { did: string; handle: string; queuedAt: string }[] {
+			return db
+				.prepare(
+					'SELECT did, handle, queued_at as queuedAt FROM signup_queue ORDER BY queued_at ASC',
+				)
+				.all() as { did: string; handle: string; queuedAt: string }[];
+		},
+
+		getQueueSize(): number {
+			const row = db.prepare('SELECT COUNT(*) as count FROM signup_queue').get() as {
+				count: number;
+			};
+			return row.count;
+		},
+
+		isQueued(did: string): boolean {
+			const row = db.prepare('SELECT 1 FROM signup_queue WHERE did = ?').get(did);
+			return row !== undefined;
 		},
 
 		close() {

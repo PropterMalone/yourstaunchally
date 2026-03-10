@@ -33,12 +33,12 @@ export const FAQ_HTML = `<!DOCTYPE html>
 
 <h2>Quick Start</h2>
 <ul>
-  <li>Mention <code>@yourstalwartally.bsky.social new game</code> to create a game</li>
-  <li>Friends mention <code>@yourstalwartally.bsky.social join #id</code> to join</li>
-  <li>Creator mentions <code>@yourstalwartally.bsky.social start #id</code> (2-7 players)</li>
+  <li>Mention <code>@yourstalwartally.bsky.social play</code> to join the matchmaking queue</li>
+  <li>A game starts automatically when 7 players are in the queue</li>
   <li>Check your DMs for your power assignment</li>
   <li>Submit orders via DM: <code>#id A PAR - BUR; F BRE - MAO</code></li>
 </ul>
+<p>Alternatively, create a private lobby with friends using <code>new game</code> / <code>join #id</code> / <code>start #id</code>.</p>
 
 <h2>How a Game Works</h2>
 <p>Diplomacy is a negotiation game set in pre-WWI Europe. Seven great powers compete for control of the continent. There are no dice — success depends entirely on negotiation and coordination with other players.</p>
@@ -68,14 +68,24 @@ export const FAQ_HTML = `<!DOCTYPE html>
 <div class="power"><strong>Russia</strong> — Largest starting position, enemies on all sides. Needs friends fast.</div>
 <div class="power"><strong>Turkey</strong> — Strong defensive corner. Slow to expand but very hard to eliminate.</div>
 
+<h2>Matchmaking Queue</h2>
+<p>The fastest way to find a game. Mention <code>@yourstalwartally.bsky.social play</code> (or <code>lfg</code>) to join the queue. When 7 players are queued, a game starts automatically with random power assignments.</p>
+<ul>
+  <li><code>play</code> / <code>lfg</code> — Join the queue</li>
+  <li><code>leave queue</code> / <code>unqueue</code> — Drop out</li>
+  <li><code>queue</code> — See who's waiting</li>
+</ul>
+<p>You can also organize your own game with the lobby commands below.</p>
+
 <h2>Mention Commands</h2>
 <p>All public commands are mentions of <code>@yourstalwartally.bsky.social</code>:</p>
 <ul>
-  <li><code>new game</code> — Create a game (you auto-join)</li>
-  <li><code>join #id</code> — Join an open game</li>
+  <li><code>play</code> / <code>lfg</code> — Join the matchmaking queue</li>
+  <li><code>new game</code> — Create a private lobby (you auto-join)</li>
+  <li><code>join #id</code> — Join an open lobby</li>
   <li><code>start #id</code> — Start the game (creator only, 2-7 players)</li>
   <li><code>status #id</code> — Current phase, center counts, deadlines</li>
-  <li><code>games</code> — List all active games</li>
+  <li><code>games</code> — List all active games and queue status</li>
   <li><code>draw #id</code> — Vote for a draw</li>
   <li><code>claim #id POWER</code> — Take an unassigned power mid-game</li>
   <li><code>abandon #id</code> — Cancel a game (creator only, lobby phase)</li>

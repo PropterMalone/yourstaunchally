@@ -32,6 +32,21 @@ export function createGame(gameId: string, now = new Date().toISOString()): Game
 	};
 }
 
+/** Create a game pre-populated with players (for matchmaking queue) */
+export function createGameWithPlayers(
+	gameId: string,
+	players: { did: string; handle: string }[],
+	now = new Date().toISOString(),
+): GameState {
+	let state = createGame(gameId, now);
+	for (const p of players) {
+		const result = addPlayer(state, p.did, p.handle, undefined, now);
+		if (!result.ok) throw new Error(`createGameWithPlayers: ${result.error}`);
+		state = result.state;
+	}
+	return state;
+}
+
 /** Generate a short game ID (6 chars, alphanumeric) */
 export function generateGameId(): string {
 	const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
