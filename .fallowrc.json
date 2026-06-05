@@ -1,0 +1,53 @@
+{
+	"entry": [
+		"packages/engine/src/index.ts",
+		"packages/feed/src/index.ts",
+		"packages/feed/src/handler.ts",
+		"packages/feed/src/register.ts",
+		"packages/shared/src/index.ts",
+		"scripts/*.ts",
+		"scripts/*.mjs"
+	],
+	"ignorePatterns": [
+		"node_modules/**",
+		"**/dist/**",
+		"coverage/**",
+		".venv/**",
+		"data/**",
+		".docker/**",
+		"scripts/__pycache__/**",
+		"**/*.py",
+		"**/*.test.ts"
+	],
+	"ignoreExportsUsedInFile": true,
+	"ignoreDependencies": [
+		"propter-bsky-kit",
+		"@yourstaunchally/shared"
+	],
+	"ignoreExports": [
+		{
+			"file": "packages/engine/src/bot.ts",
+			"exports": ["*"]
+		},
+		{
+			"file": "packages/engine/src/labeler-client.ts",
+			"exports": ["*"]
+		},
+		{
+			"file": "packages/engine/src/commentary.ts",
+			"exports": [
+				"eliminationCommentary",
+				"deadlineWarningCommentary",
+				"yearCommentary",
+				"betrayalCommentary",
+				"noOrdersCommentary",
+				"territoryCaptureCommentary",
+				"orderReportCommentary"
+			]
+		}
+	],
+	"rules": {
+		"unresolved-imports": "warn",
+		"duplicate-exports": "warn"
+	}
+}

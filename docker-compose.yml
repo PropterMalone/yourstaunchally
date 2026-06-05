@@ -1,0 +1,31 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama-data:/root/.ollama
+    # CPU-only — no GPU runtime needed
+
+  engine:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - DB_PATH=/data/yourstaunchally.db
+      - PYTHON_PATH=/app/.venv/bin/python3
+      - OLLAMA_URL=http://ollama:11434
+    volumes:
+      - ./data:/data
+    depends_on:
+      - ollama
+    networks:
+      - default
+      - propter-net
+
+volumes:
+  ollama-data:
+
+networks:
+  propter-net:
+    name: propter-net
+    external: true

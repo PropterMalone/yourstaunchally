@@ -1,0 +1,36 @@
+{
+	"$schema": "https://unpkg.com/knip@6/schema.json",
+	"workspaces": {
+		".": {
+			"entry": [
+				"scripts/*.{ts,mjs}",
+				"scripts/_*.{ts,mjs}"
+			],
+			"project": ["scripts/**/*.{ts,mjs}"],
+			"ignoreDependencies": [
+				"@atproto/api",
+				"better-sqlite3",
+				"@yourstaunchally/shared"
+			],
+			"ignore": [
+				"scripts/send-game-dms.ts"
+			]
+		},
+		"packages/shared": {
+			"project": ["src/**/*.ts"]
+		},
+		"packages/engine": {
+			"project": ["src/**/*.ts"],
+			"ignoreDependencies": ["ts-node"]
+		},
+		"packages/feed": {
+			"project": ["src/**/*.ts"],
+			"ignoreBinaries": ["tsx"],
+			"ignoreDependencies": ["ts-node"]
+		}
+	},
+	"ignoreExportsUsedInFile": true,
+	"ignore": [
+		"packages/engine/src/commentary.ts"
+	]
+}

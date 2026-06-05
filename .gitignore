@@ -1,0 +1,13 @@
+node_modules/
+dist/
+coverage/
+.env
+*.db
+*.db-journal
+data/
+scripts/accounts.json
+.venv/
+__pycache__/
+*.pyc
+.docker/
+CLAUDE.md

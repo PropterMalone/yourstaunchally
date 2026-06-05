@@ -1,0 +1,429 @@
+import { describe, expect, it } from 'vitest';
+import {
+	convertMovesToRetreats,
+	expandWaives,
+	inferBuildOrders,
+	inferCoast,
+	normalizeOrderString,
+	parseOrder,
+	parseOrders,
+} from './orders.js';
+
+describe('parseOrder', () => {
+	it('parses hold orders', () => {
+		const result = parseOrder('A PAR H');
+		expect(result).toEqual({
+			ok: true,
+			order: { raw: 'A PAR H', type: 'hold', unitType: 'A', province: 'PAR' },
+		});
+	});
+
+	it('parses fleet hold', () => {
+		const result = parseOrder('F BRE H');
+		expect(result).toEqual({
+			ok: true,
+			order: { raw: 'F BRE H', type: 'hold', unitType: 'F', province: 'BRE' },
+		});
+	});
+
+	it('parses move orders', () => {
+		const result = parseOrder('A PAR - BUR');
+		expect(result).toEqual({
+			ok: true,
+			order: { raw: 'A PAR - BUR', type: 'move', unitType: 'A', province: 'PAR', target: 'BUR' },
+		});
+	});
+
+	it('parses move with coast', () => {
+		const result = parseOrder('F BUL/SC - GRE');
+		expect(result).toEqual({
+			ok: true,
+			order: {
+				raw: 'F BUL/SC - GRE',
+				type: 'move',
+				unitType: 'F',
+				province: 'BUL/SC',
+				target: 'GRE',
+			},
+		});
+	});
+
+	it('parses move with VIA (convoy route)', () => {
+		const result = parseOrder('A BUR - PAR VIA');
+		expect(result).toEqual({
+			ok: true,
+			order: {
+				raw: 'A BUR - PAR VIA',
+				type: 'move',
+				unitType: 'A',
+				province: 'BUR',
+				target: 'PAR',
+			},
+		});
+	});
+
+	it('parses support hold', () => {
+		const result = parseOrder('A MAR S A PAR');
+		expect(result).toEqual({
+			ok: true,
+			order: {
+				raw: 'A MAR S A PAR',
+				type: 'support',
+				unitType: 'A',
+				province: 'MAR',
+				supportedUnit: { type: 'A', province: 'PAR' },
+			},
+		});
+	});
+
+	it('parses support hold with explicit H', () => {
+		const result = parseOrder('A UKR S F RUM H');
+		expect(result).toEqual({
+			ok: true,
+			order: {
+				raw: 'A UKR S F RUM H',
+				type: 'support',
+				unitType: 'A',
+				province: 'UKR',
+				supportedUnit: { type: 'F', province: 'RUM' },
+			},
+		});
+	});
+
+	it('parses support move', () => {
+		const result = parseOrder('A MAR S A PAR - BUR');
+		expect(result).toEqual({
+			ok: true,
+			order: {
+				raw: 'A MAR S A PAR - BUR',
+				type: 'support',
+				unitType: 'A',
+				province: 'MAR',
+				supportedUnit: { type: 'A', province: 'PAR' },
+				supportTarget: 'BUR',
+			},
+		});
+	});
+
+	it('parses convoy', () => {
+		const result = parseOrder('F MAO C A BRE - SPA');
+		expect(result).toEqual({
+			ok: true,
+			order: {
+				raw: 'F MAO C A BRE - SPA',
+				type: 'convoy',
+				unitType: 'F',
+				province: 'MAO',
+				target: 'SPA',
+				convoyedUnit: { type: 'A', province: 'BRE' },
+			},
+		});
+	});
+
+	it('parses build', () => {
+		const result = parseOrder('A MUN B');
+		expect(result).toEqual({
+			ok: true,
+			order: { raw: 'A MUN B', type: 'build', unitType: 'A', province: 'MUN' },
+		});
+	});
+
+	it('parses disband', () => {
+		const result = parseOrder('A MUN D');
+		expect(result).toEqual({
+			ok: true,
+			order: { raw: 'A MUN D', type: 'disband', unitType: 'A', province: 'MUN' },
+		});
+	});
+
+	it('parses retreat', () => {
+		const result = parseOrder('F HOL R HEL');
+		expect(result).toEqual({
+			ok: true,
+			order: { raw: 'F HOL R HEL', type: 'retreat', unitType: 'F', province: 'HOL', target: 'HEL' },
+		});
+	});
+
+	it('parses retreat with coast', () => {
+		const result = parseOrder('F SPA/NC R MAO');
+		expect(result).toEqual({
+			ok: true,
+			order: {
+				raw: 'F SPA/NC R MAO',
+				type: 'retreat',
+				unitType: 'F',
+				province: 'SPA/NC',
+				target: 'MAO',
+			},
+		});
+	});
+
+	it('parses WAIVE', () => {
+		const result = parseOrder('WAIVE');
+		expect(result).toEqual({
+			ok: true,
+			order: { raw: 'WAIVE', type: 'waive', unitType: 'A', province: '' },
+		});
+	});
+
+	it('parses lowercase waive', () => {
+		expect(parseOrder('waive').ok).toBe(true);
+	});
+
+	it('handles lowercase input', () => {
+		const result = parseOrder('a par - bur');
+		expect(result).toEqual({
+			ok: true,
+			order: {
+				raw: 'A PAR - BUR',
+				type: 'move',
+				unitType: 'A',
+				province: 'PAR',
+				target: 'BUR',
+			},
+		});
+	});
+
+	it('returns error for invalid input', () => {
+		const result = parseOrder('INVALID');
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.error).toContain('Unrecognized');
+		}
+	});
+
+	it('returns error for empty input', () => {
+		const result = parseOrder('');
+		expect(result.ok).toBe(false);
+	});
+
+	it('parses coast specifications on STP', () => {
+		const result = parseOrder('F STP/SC - BOT');
+		expect(result).toEqual({
+			ok: true,
+			order: {
+				raw: 'F STP/SC - BOT',
+				type: 'move',
+				unitType: 'F',
+				province: 'STP/SC',
+				target: 'BOT',
+			},
+		});
+	});
+});
+
+describe('parseOrders', () => {
+	it('parses multiple orders separated by newlines', () => {
+		const results = parseOrders('A PAR - BUR\nA MAR - SPA\nF BRE - MAO');
+		expect(results).toHaveLength(3);
+		expect(results.every((r) => r.ok)).toBe(true);
+	});
+
+	it('parses semicolon-separated orders', () => {
+		const results = parseOrders('A PAR - BUR; A MAR - SPA');
+		expect(results).toHaveLength(2);
+		expect(results.every((r) => r.ok)).toBe(true);
+	});
+
+	it('skips blank lines', () => {
+		const results = parseOrders('A PAR - BUR\n\n\nA MAR - SPA');
+		expect(results).toHaveLength(2);
+	});
+
+	it('returns errors for invalid orders among valid ones', () => {
+		const results = parseOrders('A PAR - BUR\nGARBAGE\nA MAR H');
+		expect(results).toHaveLength(3);
+		expect(results[0]?.ok).toBe(true);
+		expect(results[1]?.ok).toBe(false);
+		expect(results[2]?.ok).toBe(true);
+	});
+});
+
+describe('normalizeOrderString', () => {
+	it('uppercases and trims', () => {
+		expect(normalizeOrderString('  a par - bur  ')).toBe('A PAR - BUR');
+	});
+
+	it('collapses multiple spaces', () => {
+		expect(normalizeOrderString('A  PAR   -   BUR')).toBe('A PAR - BUR');
+	});
+
+	it('normalizes missing spaces around dashes', () => {
+		expect(normalizeOrderString('A MUN -SIL')).toBe('A MUN - SIL');
+		expect(normalizeOrderString('A MUN- SIL')).toBe('A MUN - SIL');
+		expect(normalizeOrderString('A MUN-SIL')).toBe('A MUN - SIL');
+	});
+
+	it('auto-infers coast for unambiguous fleet moves', () => {
+		expect(normalizeOrderString('F GAS - SPA')).toBe('F GAS - SPA/NC');
+		expect(normalizeOrderString('F LYO - SPA')).toBe('F LYO - SPA/SC');
+		expect(normalizeOrderString('F BAR - STP')).toBe('F BAR - STP/NC');
+		expect(normalizeOrderString('F BOT - STP')).toBe('F BOT - STP/SC');
+		expect(normalizeOrderString('F AEG - BUL')).toBe('F AEG - BUL/SC');
+		expect(normalizeOrderString('F BLA - BUL')).toBe('F BLA - BUL/EC');
+	});
+
+	it('leaves ambiguous coast moves alone', () => {
+		expect(normalizeOrderString('F MAO - SPA')).toBe('F MAO - SPA');
+		expect(normalizeOrderString('F CON - BUL')).toBe('F CON - BUL');
+		expect(normalizeOrderString('F POR - SPA')).toBe('F POR - SPA');
+	});
+
+	it('does not modify army orders to coastal provinces', () => {
+		expect(normalizeOrderString('A GAS - SPA')).toBe('A GAS - SPA');
+	});
+
+	it('does not modify fleet orders with explicit coast', () => {
+		expect(normalizeOrderString('F MAO - SPA/NC')).toBe('F MAO - SPA/NC');
+	});
+
+	it('normalizes "(via convoy)" to VIA', () => {
+		expect(normalizeOrderString('A YOR - DEN (via convoy)')).toBe('A YOR - DEN VIA');
+	});
+
+	it('strips trailing H from support-hold orders', () => {
+		expect(normalizeOrderString('A UKR S F RUM H')).toBe('A UKR S F RUM');
+	});
+
+	it('strips accidental leading game ID', () => {
+		expect(normalizeOrderString('#uetpue A WAR H')).toBe('A WAR H');
+	});
+
+	it('normalizes WAIVE with trailing province', () => {
+		expect(normalizeOrderString('WAIVE BRE')).toBe('WAIVE');
+		expect(normalizeOrderString('waive bre')).toBe('WAIVE');
+	});
+
+	it('normalizes province-first WAIVE', () => {
+		expect(normalizeOrderString('BRE WAIVE')).toBe('WAIVE');
+	});
+
+	it('normalizes bare WAIVE', () => {
+		expect(normalizeOrderString('WAIVE')).toBe('WAIVE');
+	});
+
+	it('normalizes "WAIVE 2" to WAIVE (count handled by expandWaives)', () => {
+		expect(normalizeOrderString('WAIVE 2')).toBe('WAIVE');
+	});
+
+	it('normalizes trailing R to retreat syntax', () => {
+		expect(normalizeOrderString('F HOL - HEL R')).toBe('F HOL R HEL');
+	});
+
+	it('normalizes RETREAT keyword to R', () => {
+		expect(normalizeOrderString('F HOL RETREAT HEL')).toBe('F HOL R HEL');
+	});
+
+	it('normalizes no-space hyphens in fleet moves', () => {
+		expect(normalizeOrderString('F BRE-MAO')).toBe('F BRE - MAO');
+	});
+
+	it('infers army unit type in support-move', () => {
+		expect(normalizeOrderString('A MAR S PAR - BUR')).toBe('A MAR S A PAR - BUR');
+	});
+
+	it('infers army unit type in convoy', () => {
+		expect(normalizeOrderString('F BAL C DEN - LVN')).toBe('F BAL C A DEN - LVN');
+	});
+
+	it('preserves explicit unit type in support', () => {
+		expect(normalizeOrderString('F MAR S F LYO')).toBe('F MAR S F LYO');
+	});
+
+	it('infers army unit type in support-hold', () => {
+		expect(normalizeOrderString('A MAR S PAR')).toBe('A MAR S A PAR');
+	});
+});
+
+describe('expandWaives', () => {
+	it('expands WAIVE N into N separate WAIVEs', () => {
+		expect(expandWaives(['F MAR B', 'WAIVE 2'])).toEqual(['F MAR B', 'WAIVE', 'WAIVE']);
+	});
+
+	it('passes through bare WAIVE unchanged', () => {
+		expect(expandWaives(['WAIVE'])).toEqual(['WAIVE']);
+	});
+
+	it('passes through non-WAIVE orders unchanged', () => {
+		expect(expandWaives(['A PAR - BUR', 'F BRE - MAO'])).toEqual(['A PAR - BUR', 'F BRE - MAO']);
+	});
+
+	it('handles WAIVE 1 as single WAIVE', () => {
+		expect(expandWaives(['WAIVE 1'])).toEqual(['WAIVE']);
+	});
+
+	it('is case-insensitive', () => {
+		expect(expandWaives(['waive 3'])).toEqual(['WAIVE', 'WAIVE', 'WAIVE']);
+	});
+});
+
+describe('convertMovesToRetreats', () => {
+	it('converts move syntax to retreat during retreat phase', () => {
+		expect(convertMovesToRetreats(['F HOL - HEL'], 'S1902R')).toEqual(['F HOL R HEL']);
+	});
+
+	it('leaves retreat syntax untouched', () => {
+		expect(convertMovesToRetreats(['F HOL R HEL'], 'S1902R')).toEqual(['F HOL R HEL']);
+	});
+
+	it('leaves disband orders untouched', () => {
+		expect(convertMovesToRetreats(['F HOL D'], 'S1902R')).toEqual(['F HOL D']);
+	});
+
+	it('does nothing during non-retreat phases', () => {
+		expect(convertMovesToRetreats(['F HOL - HEL'], 'S1902M')).toEqual(['F HOL - HEL']);
+		expect(convertMovesToRetreats(['A PAR - BUR'], 'F1901A')).toEqual(['A PAR - BUR']);
+	});
+
+	it('handles mixed orders in retreat phase', () => {
+		expect(convertMovesToRetreats(['F HOL - HEL', 'A BUR D'], 'S1902R')).toEqual([
+			'F HOL R HEL',
+			'A BUR D',
+		]);
+	});
+});
+
+describe('inferBuildOrders', () => {
+	it('appends B to bare unit specs during adjustment phase', () => {
+		expect(inferBuildOrders(['F EDI', 'A MUN'], 'W1901A')).toEqual(['F EDI B', 'A MUN B']);
+	});
+
+	it('does nothing during non-adjustment phases', () => {
+		expect(inferBuildOrders(['F EDI', 'A MUN'], 'S1901M')).toEqual(['F EDI', 'A MUN']);
+	});
+
+	it('does not modify orders that already have an action', () => {
+		expect(inferBuildOrders(['A PAR - BUR'], 'W1901A')).toEqual(['A PAR - BUR']);
+	});
+
+	it('does not modify disband orders', () => {
+		expect(inferBuildOrders(['A MUN D'], 'W1901A')).toEqual(['A MUN D']);
+	});
+});
+
+describe('inferCoast', () => {
+	it('returns coast for unambiguous sources', () => {
+		expect(inferCoast('GAS', 'SPA')).toBe('/NC');
+		expect(inferCoast('WES', 'SPA')).toBe('/SC');
+		expect(inferCoast('MAR', 'SPA')).toBe('/SC');
+		expect(inferCoast('AEG', 'BUL')).toBe('/SC');
+		expect(inferCoast('BLA', 'BUL')).toBe('/EC');
+		expect(inferCoast('RUM', 'BUL')).toBe('/EC');
+		expect(inferCoast('GRE', 'BUL')).toBe('/SC');
+		expect(inferCoast('BAR', 'STP')).toBe('/NC');
+		expect(inferCoast('NWY', 'STP')).toBe('/NC');
+		expect(inferCoast('BOT', 'STP')).toBe('/SC');
+		expect(inferCoast('FIN', 'STP')).toBe('/SC');
+	});
+
+	it('returns null for ambiguous sources', () => {
+		expect(inferCoast('MAO', 'SPA')).toBeNull();
+		expect(inferCoast('POR', 'SPA')).toBeNull();
+		expect(inferCoast('CON', 'BUL')).toBeNull();
+	});
+
+	it('returns null for non-coastal destinations', () => {
+		expect(inferCoast('MAO', 'BRE')).toBeNull();
+		expect(inferCoast('PAR', 'BUR')).toBeNull();
+	});
+});
